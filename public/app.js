@@ -465,7 +465,7 @@ function bugEl(c) {
   var cc = collapseCtl(c);
   v.params = null; v.shots = h('div', { class: 'shots' });
   el.append(
-    h('div', { class: 'chead' }, cc.chev, h('span', { class: 'no' }, lab(c), h('span', { class: 'target', text: 'Paste goes here' })), h('span', { class: 'grow' }), act),
+    h('div', { class: 'chead' }, cc.chev, h('span', { class: 'no' }, lab(c)), h('span', { class: 'grow' }), act),
     cc.prev,
     sum,
     h('div', { class: 'meta' }, tf('id', 'Bug ID', 'e.g. PROJ-101'), tf('module', 'Module / Feature', 'e.g. Login'), tf('env', 'Environment', 'e.g. UAT'), tf('build', 'Build / Version', 'e.g. 1.0.0'),
@@ -572,7 +572,7 @@ function caseEl(c) {
     h('button', { class: 'btn sm ghost', title: 'Copy this test case without screenshots', onclick: function () { copyCase(c); } }, 'Copy'),
     twoStep(h('button', { class: 'btn sm ghost', disabled: n === 1 }, 'Delete'), 'Delete it?', function () { removeCase(c); }));
   var cc = collapseCtl(c);
-  var head = h('div', { class: 'chead' }, cc.chev, h('span', { class: 'no' }, label(idx), h('span', { class: 'target', text: 'Paste goes here' })), seg, act);
+  var head = h('div', { class: 'chead' }, cc.chev, h('span', { class: 'no' }, label(idx)), seg, act);
 
   var desc = richField(function () { return c.title; }, function (x) { c.title = x; }, { cls: 'title', ph: 'Verify whether… (what this test case checks)', aria: label(idx) + ' description', onInput: refreshSummary });
   var data = richField(function () { return c.data; }, function (x) { c.data = x; }, { ph: 'Inputs or accounts used for this test, e.g. user: admin, amount: 500', aria: 'Test data' });
