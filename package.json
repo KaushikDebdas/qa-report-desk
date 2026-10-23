@@ -1,0 +1,9 @@
+{
+  "name": "qa-report-desk",
+  "version": "2.0.0",
+  "description": "Self-hosted test evidence document builder with Pass/Fail summary and Word/Excel/HTML export",
+  "main": "server.js",
+  "scripts": { "start": "node server.js" },
+  "engines": { "node": ">=18" },
+  "dependencies": { "docx": "8.5.0", "exceljs": "4.4.0" }
+}

@@ -1,0 +1,254 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Bug Report</title>
+<style>
+  :root { --bg:#f5f6f8; --card:#fff; --text:#1d2330; --muted:#6b7280; --line:#d9dde4; --accent:#d9480f; }
+  @media (prefers-color-scheme: dark) {
+    :root { --bg:#14171c; --card:#1d222a; --text:#e8eaee; --muted:#9aa3b2; --line:#333b47; --accent:#ff8a4c; }
+  }
+  * { box-sizing: border-box; }
+  body { margin:0; background:var(--bg); color:var(--text); font:15px/1.5 system-ui,-apple-system,Segoe UI,sans-serif; }
+  main { max-width:900px; margin:0 auto; padding:24px 16px 64px; }
+  header { display:flex; align-items:center; gap:12px; margin-bottom:16px; flex-wrap:wrap; }
+  header h1 { font-size:20px; margin:0; }
+  #project { flex:1; min-width:200px; font-weight:600; }
+  .layout { display:grid; grid-template-columns:230px 1fr; gap:16px; align-items:start; }
+  @media (max-width:700px) { .layout { grid-template-columns:1fr; } }
+  .card { background:var(--card); border:1px solid var(--line); border-radius:10px; padding:20px; }
+  .list { padding:10px; }
+  .item { display:block; width:100%; text-align:left; margin-bottom:6px; padding:8px 10px; border-radius:7px; border:1px solid transparent; background:transparent; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+  .item:hover { background:var(--bg); }
+  .item.on { border-color:var(--accent); background:var(--bg); font-weight:600; }
+  .item small { color:var(--muted); font-weight:400; }
+  label { display:block; font-weight:600; margin:16px 0 6px; }
+  label:first-child { margin-top:0; }
+  input[type=text], textarea, select { width:100%; padding:9px 11px; border:1px solid var(--line); border-radius:7px; background:var(--bg); color:var(--text); font:inherit; }
+  textarea { min-height:100px; resize:vertical; }
+  input:focus, textarea:focus, select:focus { outline:2px solid var(--accent); outline-offset:1px; }
+  .row { display:grid; grid-template-columns:1fr 1fr; gap:16px; }
+  @media (max-width:520px) { .row { grid-template-columns:1fr; } }
+  .hint { color:var(--muted); font-weight:400; font-size:13px; }
+  .shots { display:flex; flex-wrap:wrap; gap:10px; margin-top:8px; }
+  .shot { position:relative; }
+  .shot img { display:block; max-width:200px; max-height:130px; border:1px solid var(--line); border-radius:6px; }
+  .shot button { position:absolute; top:4px; right:4px; padding:0 7px; line-height:22px; }
+  .drop { border:1px dashed var(--line); border-radius:7px; padding:12px; color:var(--muted); text-align:center; }
+  button { font:inherit; cursor:pointer; border:1px solid var(--line); background:var(--card); color:var(--text); border-radius:7px; padding:8px 14px; }
+  button.primary { background:var(--accent); border-color:var(--accent); color:#fff; font-weight:600; }
+  .actions { display:flex; gap:10px; flex-wrap:wrap; margin-top:20px; }
+  .actions .sp { flex:1; }
+  #toast { position:fixed; bottom:20px; left:50%; transform:translateX(-50%); background:#1d2330; color:#fff; padding:9px 16px; border-radius:7px; }
+  [hidden] { display:none !important; }
+</style>
+</head>
+<body>
+<main>
+  <header>
+    <h1>Bug Report</h1>
+    <input type="text" id="project" placeholder="Project name, e.g. Login module – UAT" aria-label="Project name">
+    <button type="button" id="exportCsv">Export all (CSV)</button>
+    <button type="button" id="exportHtml">Export all (HTML)</button>
+  </header>
+
+  <div class="layout">
+    <div class="card list">
+      <button type="button" class="primary" id="add" style="width:100%;margin-bottom:10px">+ Add bug</button>
+      <div id="items"></div>
+    </div>
+
+    <div class="card" id="form">
+      <label for="title">Title <span class="hint">– screen + exact control/behaviour</span></label>
+      <input type="text" id="title" placeholder="Login page: Submit button stays disabled after entering a valid password">
+
+      <label for="steps">Steps to Reproduce <span class="hint">– one action per line, numbered automatically</span></label>
+      <textarea id="steps" placeholder="Open the application.&#10;Go to the Login page.&#10;Click on Submit."></textarea>
+
+      <label for="actual">Actual Result</label>
+      <textarea id="actual" placeholder="What happened, with the exact message if any."></textarea>
+
+      <label for="expected">Expected Result</label>
+      <textarea id="expected" placeholder="System should …"></textarea>
+
+      <div class="row">
+        <div>
+          <label for="severity">Severity</label>
+          <select id="severity"><option>Critical</option><option>High</option><option>Medium</option><option>Low</option></select>
+        </div>
+        <div>
+          <label for="priority">Priority</label>
+          <select id="priority"><option>Critical</option><option>High</option><option>Medium</option><option>Low</option></select>
+        </div>
+      </div>
+
+      <label>Screenshots <span class="hint">– optional</span></label>
+      <div class="drop" id="drop">Paste (Ctrl+V), drop or <button type="button" id="browse">Browse</button></div>
+      <input type="file" id="file" accept="image/*" multiple hidden>
+      <div class="shots" id="shots"></div>
+
+      <div class="actions">
+        <button type="button" class="primary" id="copy">Copy this bug</button>
+        <button type="button" id="dup">Duplicate</button>
+        <span class="sp"></span>
+        <button type="button" id="del">Delete</button>
+      </div>
+    </div>
+  </div>
+</main>
+<div id="toast" hidden role="status"></div>
+
+<script>
+(function () {
+  var KEY = 'bugReportProject';
+  var F = ['title', 'steps', 'actual', 'expected', 'severity', 'priority'];
+  var state = { project: '', active: 0, bugs: [] };
+  var $ = function (id) { return document.getElementById(id); };
+
+  function blank() { return { title: '', steps: '', actual: '', expected: '', severity: 'Medium', priority: 'Medium', shots: [] }; }
+  function cur() { return state.bugs[state.active]; }
+
+  function toast(msg) {
+    var t = $('toast'); t.textContent = msg; t.hidden = false;
+    clearTimeout(toast.t); toast.t = setTimeout(function () { t.hidden = true; }, 2200);
+  }
+  function save() {
+    try { localStorage.setItem(KEY, JSON.stringify(state)); }
+    catch (e) { toast('Could not autosave (browser storage full) – export your work'); }
+  }
+  function load() {
+    try {
+      var d = JSON.parse(localStorage.getItem(KEY) || 'null');
+      if (d && d.bugs && d.bugs.length) state = d;
+    } catch (e) {}
+    if (!state.bugs.length) state.bugs.push(blank());
+    if (state.active >= state.bugs.length) state.active = 0;
+  }
+
+  function renderList() {
+    var box = $('items'); box.textContent = '';
+    state.bugs.forEach(function (b, i) {
+      var btn = document.createElement('button');
+      btn.type = 'button'; btn.className = 'item' + (i === state.active ? ' on' : '');
+      var n = document.createElement('small'); n.textContent = (i + 1) + '. ';
+      btn.append(n, document.createTextNode(b.title.trim() || 'Untitled bug'));
+      btn.onclick = function () { state.active = i; renderAll(); save(); };
+      box.append(btn);
+    });
+  }
+  function renderForm() {
+    var b = cur();
+    F.forEach(function (k) { $(k).value = b[k]; });
+    renderShots();
+  }
+  function renderShots() {
+    var box = $('shots'); box.textContent = '';
+    cur().shots.forEach(function (src, i) {
+      var w = document.createElement('div'); w.className = 'shot';
+      var img = document.createElement('img'); img.src = src; img.alt = 'Screenshot ' + (i + 1);
+      var x = document.createElement('button'); x.type = 'button'; x.textContent = '✕'; x.title = 'Remove';
+      x.onclick = function () { cur().shots.splice(i, 1); renderShots(); save(); };
+      w.append(img, x); box.append(w);
+    });
+  }
+  function renderAll() { $('project').value = state.project; renderList(); renderForm(); }
+
+  function addFiles(files) {
+    var b = cur();
+    Array.prototype.forEach.call(files, function (f) {
+      if (!/^image\//.test(f.type)) return;
+      var r = new FileReader();
+      r.onload = function () { b.shots.push(r.result); if (b === cur()) renderShots(); save(); };
+      r.readAsDataURL(f);
+    });
+  }
+
+  function stepLines(b) {
+    return b.steps.split('\n').map(function (l) { return l.replace(/^\s*\d+[.)]\s*/, '').trim(); }).filter(Boolean);
+  }
+  function stepsText(b) { return stepLines(b).map(function (l, i) { return (i + 1) + '. ' + l; }).join('\n'); }
+  function bugText(b) {
+    return 'Title: ' + b.title.trim() + '\n\nSteps to Reproduce:\n' + stepsText(b) +
+      '\n\nActual Result:\n' + b.actual.trim() + '\n\nExpected Result:\n' + b.expected.trim() +
+      '\n\nSeverity: ' + b.severity + '\nPriority: ' + b.priority;
+  }
+  function esc(s) { return String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;'); }
+  function bugHtml(b, num) {
+    var br = function (s) { return esc(s.trim()).replace(/\n/g, '<br>'); };
+    return '<h3>' + (num ? num + '. ' : '') + esc(b.title.trim() || 'Untitled bug') + '</h3>' +
+      '<p><b>Steps to Reproduce</b></p><ol>' + stepLines(b).map(function (l) { return '<li>' + esc(l) + '</li>'; }).join('') + '</ol>' +
+      '<p><b>Actual Result</b><br>' + br(b.actual) + '</p><p><b>Expected Result</b><br>' + br(b.expected) + '</p>' +
+      '<p><b>Severity:</b> ' + b.severity + ' &nbsp; <b>Priority:</b> ' + b.priority + '</p>' +
+      b.shots.map(function (s) { return '<p><img src="' + s + '" style="max-width:600px"></p>'; }).join('');
+  }
+  function fileName(ext) {
+    return (state.project.trim().replace(/[^\w-]+/g, '_').slice(0, 60) || 'bug_reports') + ext;
+  }
+  function download(name, mime, content) {
+    var a = document.createElement('a');
+    a.href = URL.createObjectURL(new Blob([content], { type: mime }));
+    a.download = name; a.click(); URL.revokeObjectURL(a.href);
+  }
+
+  $('copy').onclick = function () {
+    var b = cur();
+    if (!b.title.trim()) { $('title').focus(); toast('Add a title first'); return; }
+    var done = function () { toast('Copied'); };
+    if (window.ClipboardItem && navigator.clipboard && navigator.clipboard.write) {
+      navigator.clipboard.write([new ClipboardItem({
+        'text/html': new Blob([bugHtml(b)], { type: 'text/html' }),
+        'text/plain': new Blob([bugText(b)], { type: 'text/plain' })
+      })]).then(done, function () { navigator.clipboard.writeText(bugText(b)).then(done); });
+    } else if (navigator.clipboard) { navigator.clipboard.writeText(bugText(b)).then(done); }
+  };
+  $('exportCsv').onclick = function () {
+    var q = function (s) { return '"' + String(s).replace(/"/g, '""') + '"'; };
+    var rows = [['Title', 'Steps to Reproduce', 'Actual Result', 'Expected Result', 'Severity', 'Priority']];
+    state.bugs.forEach(function (b) { rows.push([b.title.trim(), stepsText(b), b.actual.trim(), b.expected.trim(), b.severity, b.priority]); });
+    download(fileName('.csv'), 'text/csv;charset=utf-8', '﻿' + rows.map(function (r) { return r.map(q).join(','); }).join('\r\n'));
+    toast('CSV does not include screenshots – use HTML for those');
+  };
+  $('exportHtml').onclick = function () {
+    var body = '<h1>' + esc(state.project.trim() || 'Bug Reports') + '</h1>' +
+      state.bugs.map(function (b, i) { return bugHtml(b, i + 1); }).join('<hr>');
+    download(fileName('.html'), 'text/html', '<!doctype html><meta charset="utf-8"><title>' + esc(state.project || 'Bug Reports') +
+      '</title><body style="font-family:Segoe UI,Arial,sans-serif;max-width:800px;margin:24px auto">' + body);
+  };
+
+  $('add').onclick = function () { state.bugs.push(blank()); state.active = state.bugs.length - 1; renderAll(); save(); $('title').focus(); };
+  $('dup').onclick = function () {
+    var c = JSON.parse(JSON.stringify(cur()));
+    state.bugs.splice(state.active + 1, 0, c); state.active++; renderAll(); save();
+  };
+  $('del').onclick = function () {
+    if (!confirm('Delete this bug?')) return;
+    state.bugs.splice(state.active, 1);
+    if (!state.bugs.length) state.bugs.push(blank());
+    state.active = Math.min(state.active, state.bugs.length - 1);
+    renderAll(); save();
+  };
+
+  $('browse').onclick = function (e) { e.stopPropagation(); $('file').click(); };
+  $('file').onchange = function (e) { addFiles(e.target.files); e.target.value = ''; };
+  document.addEventListener('paste', function (e) {
+    var f = e.clipboardData && e.clipboardData.files;
+    if (f && f.length) addFiles(f);
+  });
+  $('drop').addEventListener('dragover', function (e) { e.preventDefault(); });
+  $('drop').addEventListener('drop', function (e) { e.preventDefault(); addFiles(e.dataTransfer.files); });
+
+  F.forEach(function (k) {
+    $(k).addEventListener('input', function () {
+      cur()[k] = $(k).value;
+      if (k === 'title') renderList();
+      save();
+    });
+  });
+  $('project').addEventListener('input', function () { state.project = $('project').value; save(); });
+
+  load(); renderAll();
+})();
+</script>
+</body>
+</html>
