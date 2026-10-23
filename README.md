@@ -30,3 +30,4 @@ There is no login. If you expose it beyond your own machine, put it behind your 
 - Screenshots: paste (Ctrl+V), drop or browse; they fit a fixed frame; same frame is used in exports.
 - Autosave; "My documents" to reopen, duplicate or delete.
 - Backup / Import: "My documents" has **Backup all** (one .json file with every document and screenshot) and **Import** (load that file back, on any browser or computer). Import also accepts old `data/docs/*.json` files together with their `data/shots/*.txt` screenshots.
+- Cards collapse and expand (▾ on each card, plus Collapse all / Expand all); a collapsed card shows a one-line summary.

@@ -339,7 +339,30 @@ document.addEventListener('visibilitychange', function () { if (document.visibil
 window.addEventListener('pagehide', function () { if (cur) { clearTimeout(saveTimer); doSave(); } });
 
 /* ------------------------------------------------------------ render */
-function openDoc(d) { cur = fixDoc(clone(d)); activeCase = null; views = {}; panelOpen = false; persisted = docs.some(function (x) { return x.id === d.id; }); render(); }
+/* ---------- collapsible cards (view state only, not saved) ---------- */
+var collapsed = {};
+function previewText(c) {
+  if (cur.type === 'bug') { var b = c.bug; return (b.id ? b.id + ': ' : '') + (c.sum.trim() || '(no summary yet)') + '  ·  ' + b.severity + '  ·  ' + b.status; }
+  return EX.firstLine(richBlocks(c.title), 140) || '(no description yet)';
+}
+function setCollapsed(c, on, elArg) {
+  collapsed[c.id] = !!on;
+  var el = elArg || document.getElementById('case-' + c.id); if (!el) return;
+  el.classList.toggle('collapsed', !!on);
+  var chev = el.querySelector('.chev'), prev = el.querySelector('.cprev');
+  if (chev) { chev.textContent = on ? '▸' : '▾'; chev.title = on ? 'Expand' : 'Collapse'; chev.setAttribute('aria-expanded', String(!on)); chev.setAttribute('aria-label', (on ? 'Expand ' : 'Collapse ') + lab(c)); }
+  if (prev && on) prev.textContent = previewText(c);
+}
+function collapseCtl(c) {
+  var chev = h('button', { class: 'btn sm ghost chev', type: 'button', onclick: function (e) { e.stopPropagation(); setCollapsed(c, !collapsed[c.id]); } });
+  var prev = h('div', { class: 'cprev', role: 'button', tabindex: '0', title: 'Click to expand', onclick: function () { setCollapsed(c, false); }, onkeydown: function (e) { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); setCollapsed(c, false); } } });
+  return { chev: chev, prev: prev };
+}
+function collapseAllBtns() {
+  function all(on) { cur.cases.forEach(function (c) { setCollapsed(c, on); }); }
+  return [h('button', { class: 'btn sm ghost', type: 'button', onclick: function () { all(true); } }, 'Collapse all'), h('button', { class: 'btn sm ghost', type: 'button', onclick: function () { all(false); } }, 'Expand all')];
+}
+function openDoc(d) { cur = fixDoc(clone(d)); activeCase = null; views = {}; collapsed = {}; panelOpen = false; persisted = docs.some(function (x) { return x.id === d.id; }); render(); }
 function render() {
   var keep = saveEl && saveEl.textContent;
   app.replaceChildren();
@@ -375,7 +398,7 @@ function renderBug() {
   casesBox = h('div');
   main.append(h('div', { class: 'sheet bugsheet' }, h('div', { class: 'lbl', text: 'Bug report' }), title,
     sumBox,
-    h('div', { class: 'bartools' }, countEl, h('label', { class: 'lbl', for: 'doc-ratio', text: 'Screenshot frame' }), ratio),
+    h('div', { class: 'bartools' }, countEl, collapseAllBtns(), h('label', { class: 'lbl', for: 'doc-ratio', text: 'Screenshot frame' }), ratio),
     casesBox,
     h('button', { class: 'btn addcase', onclick: function () { var c = newBugCase(); cur.cases.push(c); activeCase = c.id; renderCases(); refreshSummary(); markDirty(); focusCase(c.id); } }, '+ Add bug')));
   applyRatio(); renderCases(); refreshSummary();
@@ -430,9 +453,11 @@ function bugEl(c) {
     h('button', { class: 'btn sm ghost', title: 'Move down', 'aria-label': 'Move bug down', disabled: idx === n - 1, onclick: function () { moveCase(c, 1); } }, '↓'),
     h('button', { class: 'btn sm ghost', title: 'Copy this bug without screenshots', onclick: function () { copyCase(c); } }, 'Copy'),
     twoStep(h('button', { class: 'btn sm ghost', disabled: n === 1 }, 'Delete'), 'Delete it?', function () { removeCase(c); }));
+  var cc = collapseCtl(c);
   v.params = null; v.shots = h('div', { class: 'shots' });
   el.append(
-    h('div', { class: 'chead' }, h('span', { class: 'no' }, lab(c), h('span', { class: 'target', text: 'Paste goes here' })), h('span', { class: 'grow' }), act),
+    h('div', { class: 'chead' }, cc.chev, h('span', { class: 'no' }, lab(c), h('span', { class: 'target', text: 'Paste goes here' })), h('span', { class: 'grow' }), act),
+    cc.prev,
     sum,
     h('div', { class: 'meta' }, tf('id', 'Bug ID', 'e.g. PROJ-101'), tf('module', 'Module / Feature', 'e.g. Login'), tf('env', 'Environment', 'e.g. UAT'), tf('build', 'Build / Version', 'e.g. 1.0.0'),
       sf('severity', 'Severity', SEVERITY), sf('priority', 'Priority', PRIORITY), sf('status', 'Status', BUGSTATUS),
@@ -441,6 +466,7 @@ function bugEl(c) {
       rf('expected', 'Expected result', 'What should happen'), rf('actual', 'Actual result', 'What happens instead, with any error message'), rf('notes', 'Notes / workaround', 'Optional')),
     v.shots);
   renderShots(c);
+  setCollapsed(c, collapsed[c.id], el);
   return el;
 }
 function renderMain() {
@@ -461,7 +487,7 @@ function renderMain() {
   main.append(h('div', { class: 'sheet' }, title, ticket,
     h('div', { class: 'meta' }, mf('tester', 'Tested by', 'Name'), mf('date', 'Date', '', 'date'), mf('env', 'Environment / build', 'e.g. UAT · 1.0.0')),
     sumBox,
-    h('div', { class: 'bartools' }, countEl, h('label', { class: 'lbl', for: 'doc-ratio', text: 'Screenshot frame' }), ratio),
+    h('div', { class: 'bartools' }, countEl, collapseAllBtns(), h('label', { class: 'lbl', for: 'doc-ratio', text: 'Screenshot frame' }), ratio),
     casesBox,
     h('button', { class: 'btn addcase', onclick: function () { var c = newCase(); cur.cases.push(c); activeCase = c.id; renderCases(); refreshSummary(); markDirty(); focusCase(c.id); } }, '+ Add test case')));
   applyRatio(); renderCases(); refreshSummary();
@@ -505,6 +531,7 @@ function drawSummary() {
 }
 function jumpTo(id) {
   var e = document.getElementById('case-' + id); if (!e) return;
+  var cc = cur.cases.filter(function (x) { return x.id === id; })[0]; if (cc && collapsed[id]) setCollapsed(cc, false);
   e.scrollIntoView({ behavior: 'smooth', block: 'start' });
   e.classList.add('flash'); setTimeout(function () { e.classList.remove('flash'); }, 1300);
 }
@@ -534,15 +561,17 @@ function caseEl(c) {
     h('button', { class: 'btn sm ghost', title: 'Move down', 'aria-label': 'Move test case down', disabled: idx === n - 1, onclick: function () { moveCase(c, 1); } }, '↓'),
     h('button', { class: 'btn sm ghost', title: 'Copy this test case without screenshots', onclick: function () { copyCase(c); } }, 'Copy'),
     twoStep(h('button', { class: 'btn sm ghost', disabled: n === 1 }, 'Delete'), 'Delete it?', function () { removeCase(c); }));
-  var head = h('div', { class: 'chead' }, h('span', { class: 'no' }, label(idx), h('span', { class: 'target', text: 'Paste goes here' })), seg, act);
+  var cc = collapseCtl(c);
+  var head = h('div', { class: 'chead' }, cc.chev, h('span', { class: 'no' }, label(idx), h('span', { class: 'target', text: 'Paste goes here' })), seg, act);
 
   var desc = richField(function () { return c.title; }, function (x) { c.title = x; }, { cls: 'title', ph: 'Verify whether… (what this test case checks)', aria: label(idx) + ' description', onInput: refreshSummary });
   var data = richField(function () { return c.data; }, function (x) { c.data = x; }, { ph: 'Inputs or accounts used for this test, e.g. user: admin, amount: 500', aria: 'Test data' });
   var notes = richField(function () { return c.notes; }, function (x) { c.notes = x; }, { ph: 'Actual result, bug id, observations…', aria: 'Remarks' });
   function fld(l, ctrl) { return h('div', { class: 'field' }, h('span', { class: 'lbl', text: l }), ctrl); }
   v.params = h('div'); v.shots = h('div', { class: 'shots' });
-  el.append(head, fld('Description', desc), fld('Test data', data), v.params, fld('Remarks / actual result', notes), v.shots);
+  el.append(head, cc.prev, fld('Description', desc), fld('Test data', data), v.params, fld('Remarks / actual result', notes), v.shots);
   renderParams(c); renderShots(c);
+  setCollapsed(c, collapsed[c.id], el);
   return el;
 }
 function moveCase(c, d) {
@@ -647,6 +676,7 @@ document.addEventListener('paste', function (e) {
   if (!imgs.length || items.some(function (i) { return i.type === 'text/plain'; })) return;
   e.preventDefault();
   var c = cur.cases.filter(function (x) { return x.id === activeCase; })[0] || cur.cases[0];
+  if (collapsed[c.id]) setCollapsed(c, false);
   if (c.id !== activeCase) { activeCase = c.id; var el = document.getElementById('case-' + c.id); if (el) el.classList.add('active'); }
   addFiles(c, imgs.map(function (i) { return i.getAsFile(); }).filter(Boolean));
 });
