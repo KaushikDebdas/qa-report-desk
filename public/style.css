@@ -163,9 +163,15 @@ figure.shot{margin:0;display:grid;gap:6px;min-width:0}
 select.in{padding:5px 7px}
 
 /* collapsible cards */
-.chev{width:30px;padding:0;font-size:15px;line-height:1;flex:none}
+.chev{width:30px;padding:0;font-size:20px;line-height:1;flex:none}
 .cprev{display:none;padding:7px 10px;border-radius:6px;background:var(--field);cursor:pointer;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .cprev:hover{outline:1px solid var(--line)}
 .case.collapsed>:not(.chead):not(.cprev){display:none}
 .case.collapsed>.cprev{display:block}
 .case.collapsed{padding-bottom:10px}
+
+/* collapsible summary */
+.sumhead{display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:8px}
+.sumhead h2{margin:0!important}
+.summary.sumcollapsed .bar,.summary.sumcollapsed .srows{display:none}
+.summary.sumcollapsed .sumhead{margin-bottom:6px}

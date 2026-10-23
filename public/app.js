@@ -358,11 +358,19 @@ function collapseCtl(c) {
   var prev = h('div', { class: 'cprev', role: 'button', tabindex: '0', title: 'Click to expand', onclick: function () { setCollapsed(c, false); }, onkeydown: function (e) { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); setCollapsed(c, false); } } });
   return { chev: chev, prev: prev };
 }
+var sumCollapsed = false;
+function sumHead() {
+  sumBox.classList.toggle('sumcollapsed', sumCollapsed);
+  function paint(b) { b.textContent = sumCollapsed ? '▸' : '▾'; b.title = sumCollapsed ? 'Expand summary' : 'Collapse summary'; b.setAttribute('aria-expanded', String(!sumCollapsed)); }
+  var chev = h('button', { class: 'btn sm ghost chev', type: 'button', 'aria-label': 'Toggle summary', onclick: function () { sumCollapsed = !sumCollapsed; sumBox.classList.toggle('sumcollapsed', sumCollapsed); paint(chev); } });
+  paint(chev);
+  return h('div', { class: 'sumhead' }, chev, h('h2', { text: 'Summary' }), h('span', { class: 'grow' }), collapseAllBtns());
+}
 function collapseAllBtns() {
   function all(on) { cur.cases.forEach(function (c) { setCollapsed(c, on); }); }
-  return [h('button', { class: 'btn sm ghost', type: 'button', onclick: function () { all(true); } }, 'Collapse all'), h('button', { class: 'btn sm ghost', type: 'button', onclick: function () { all(false); } }, 'Expand all')];
+  return [h('button', { class: 'btn sm ghost', type: 'button', title: 'Collapse every card', onclick: function () { all(true); } }, 'Collapse all'), h('button', { class: 'btn sm ghost', type: 'button', title: 'Expand every card', onclick: function () { all(false); } }, 'Expand all')];
 }
-function openDoc(d) { cur = fixDoc(clone(d)); activeCase = null; views = {}; collapsed = {}; panelOpen = false; persisted = docs.some(function (x) { return x.id === d.id; }); render(); }
+function openDoc(d) { cur = fixDoc(clone(d)); activeCase = null; views = {}; collapsed = {}; sumCollapsed = false; panelOpen = false; persisted = docs.some(function (x) { return x.id === d.id; }); render(); }
 function render() {
   var keep = saveEl && saveEl.textContent;
   app.replaceChildren();
@@ -398,7 +406,7 @@ function renderBug() {
   casesBox = h('div');
   main.append(h('div', { class: 'sheet bugsheet' }, h('div', { class: 'lbl', text: 'Bug report' }), title,
     sumBox,
-    h('div', { class: 'bartools' }, countEl, collapseAllBtns(), h('label', { class: 'lbl', for: 'doc-ratio', text: 'Screenshot frame' }), ratio),
+    h('div', { class: 'bartools' }, countEl, h('label', { class: 'lbl', for: 'doc-ratio', text: 'Screenshot frame' }), ratio),
     casesBox,
     h('button', { class: 'btn addcase', onclick: function () { var c = newBugCase(); cur.cases.push(c); activeCase = c.id; renderCases(); refreshSummary(); markDirty(); focusCase(c.id); } }, '+ Add bug')));
   applyRatio(); renderCases(); refreshSummary();
@@ -413,7 +421,7 @@ function drawBugSummary() {
   var pills = [h('span', { class: 'pill overall blocked', text: open + ' open' }), h('span', { class: 'pill none', text: L.length + ' total' })];
   SEVERITY.forEach(function (k) { if (by[k]) { var v = EX.SEV[k]; pills.push(h('span', { class: 'pill', style: 'background:#' + v.fill + ';color:#' + v.ink, text: by[k] + ' ' + k })); } });
   sumBox.replaceChildren(
-    h('h2', { text: 'Summary' }),
+    sumHead(),
     h('div', { class: 'sumtop' }, pills),
     h('div', { class: 'srows' }, L.map(function (c, i) {
       var b = c.bug;
@@ -487,7 +495,7 @@ function renderMain() {
   main.append(h('div', { class: 'sheet' }, title, ticket,
     h('div', { class: 'meta' }, mf('tester', 'Tested by', 'Name'), mf('date', 'Date', '', 'date'), mf('env', 'Environment / build', 'e.g. UAT · 1.0.0')),
     sumBox,
-    h('div', { class: 'bartools' }, countEl, collapseAllBtns(), h('label', { class: 'lbl', for: 'doc-ratio', text: 'Screenshot frame' }), ratio),
+    h('div', { class: 'bartools' }, countEl, h('label', { class: 'lbl', for: 'doc-ratio', text: 'Screenshot frame' }), ratio),
     casesBox,
     h('button', { class: 'btn addcase', onclick: function () { var c = newCase(); cur.cases.push(c); activeCase = c.id; renderCases(); refreshSummary(); markDirty(); focusCase(c.id); } }, '+ Add test case')));
   applyRatio(); renderCases(); refreshSummary();
@@ -512,7 +520,7 @@ function drawSummary() {
   var s = cur.cases.reduce(function (a, c) { return a + c.shots.length; }, 0);
   countEl.textContent = T.total + ' test case' + (T.total === 1 ? '' : 's') + ' · ' + s + ' screenshot' + (s === 1 ? '' : 's');
   sumBox.replaceChildren(
-    h('h2', { text: 'Summary' }),
+    sumHead(),
     h('div', { class: 'sumtop' },
       h('span', { class: 'pill overall ' + overall, text: 'Overall: ' + T.rate + '% passed' }),
       h('span', { class: 'pill pass', text: T.pass + ' passed' }),
@@ -550,7 +558,7 @@ function caseEl(c) {
 
   var seg = h('div', { class: 'seg', role: 'group', 'aria-label': 'Result of ' + label(idx) }, STATUSES.map(function (s) {
     return h('button', { type: 'button', class: s[0] + (c.status === s[0] ? ' on' : ''), 'aria-pressed': String(c.status === s[0]), onclick: function () {
-      c.status = s[0]; el.className = 'case s-' + c.status + (activeCase === c.id ? ' active' : '');
+      c.status = s[0]; el.className = 'case s-' + c.status + (activeCase === c.id ? ' active' : '') + (collapsed[c.id] ? ' collapsed' : '');
       Array.prototype.forEach.call(seg.children, function (b, k) { var on = STATUSES[k][0] === c.status; b.classList.toggle('on', on); b.setAttribute('aria-pressed', String(on)); });
       refreshSummary(); markDirty();
     } }, s[1]);
