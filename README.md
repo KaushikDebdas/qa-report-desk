@@ -22,14 +22,14 @@ Options (environment variables): `PORT=8080`, `HOST=0.0.0.0` (share on your netw
 There is no login. If you expose it beyond your own machine, put it behind your company VPN or a reverse proxy with authentication.
 
 ## Features
-- Two templates: **Test evidence document** and **Bug report** (File > + New).
+- Two templates: **Test evidence document** and **Bug report** (create them from the side menu).
 - Overall result shown as a pass percentage (passed / total test cases).
 - Pass / Fail / Blocked / Not run per test case; live summary; click a row to jump to the case.
 - Word and HTML exports have a clickable summary and "Back to summary" links; Excel has a Summary tab with links.
 - Bold, italic, underline, bullets, numbered lists, text colour and highlight in description, test data and remarks.
 - Screenshots: paste (Ctrl+V), drop or browse; they fit a fixed frame; same frame is used in exports.
-- Autosave; "My documents" to reopen, duplicate or delete.
-- Backup / Import: "My documents" has **Backup all** (one .json file with every document and screenshot) and **Import** (load that file back, on any browser or computer). Import also accepts old `data/docs/*.json` files together with their `data/shots/*.txt` screenshots.
+- Autosave; the side menu lists "My documents" to reopen, duplicate or delete (on a phone, open it with the menu button).
+- Backup / Import: the side menu has **Backup all** (one .json file with every document and screenshot) and **Import** (load that file back, on any browser or computer). Import also accepts old `data/docs/*.json` files together with their `data/shots/*.txt` screenshots.
 - Cards collapse and expand (▾ on each card, plus Collapse all / Expand all); a collapsed card shows a one-line summary.
 - Summary is collapsible too; its header has Collapse all / Expand all for every card.
 - "+ Add below" on every test case / bug inserts a new one right after it; numbers update automatically.

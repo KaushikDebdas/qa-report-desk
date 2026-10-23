@@ -327,6 +327,7 @@ async function doSave() {
     var snap = clone(cur); await Store.put(snap.id, snap); persisted = true;
     var i = docs.findIndex(function (d) { return d.id === snap.id; }); if (i < 0) docs.push(snap); else docs[i] = snap;
     if (!again) setSave('saved');
+    renderPanel();
   } catch (e) { setSave('err', 'Could not save. Check that the browser allows site storage.'); again = false; clearTimeout(saveTimer); saveTimer = setTimeout(doSave, 4000); }
   saving = false;
   if (again) { again = false; doSave(); }
@@ -371,28 +372,45 @@ function collapseAllBtns() {
   return [h('button', { class: 'btn sm ghost', type: 'button', title: 'Collapse every card', onclick: function () { all(true); } }, 'Collapse all'), h('button', { class: 'btn sm ghost', type: 'button', title: 'Expand every card', onclick: function () { all(false); } }, 'Expand all')];
 }
 function openDoc(d) { cur = fixDoc(clone(d)); activeCase = null; views = {}; collapsed = {}; sumCollapsed = false; panelOpen = false; persisted = docs.some(function (x) { return x.id === d.id; }); render(); }
+var shell, sideOpen = (function () { try { if (window.matchMedia && matchMedia('(max-width: 899px)').matches) return false; return localStorage.getItem('qrdSide') !== '0'; } catch (e) { return true; } })();
+function isNarrow() { return !!(window.matchMedia && matchMedia('(max-width: 899px)').matches); }
+function setSide(on) {
+  sideOpen = !!on; if (shell) shell.classList.toggle('side-open', sideOpen);
+  if (!isNarrow()) { try { localStorage.setItem('qrdSide', sideOpen ? '1' : '0'); } catch (e) { /* ignore */ } }
+}
 function render() {
   var keep = saveEl && saveEl.textContent;
   app.replaceChildren();
   saveEl = h('span', { class: 'save', 'aria-live': 'polite' }, keep && !/^Unsaved|^Saving/.test(keep) ? keep : 'Saved');
   var top = h('div', { class: 'top' }, h('div', { class: 'wrap' },
+    h('button', { class: 'btn ghost menubtn', type: 'button', title: 'Show or hide the documents menu', 'aria-label': 'Documents menu', onclick: function () { setSide(!sideOpen); } }, '\u2630'),
     h('div', { class: 'brand' }, h('i'), 'QA Report Desk'),
-    h('button', { class: 'btn sm', onclick: function () { panelOpen = !panelOpen; renderPanel(); } }, 'My documents'),
-    newMenu(),
     h('span', { class: 'grow' }), saveEl, exportMenu()));
-  panelEl = h('div', { class: 'panel', hidden: true });
   main = h('main', { class: 'wrap' });
-  app.append(top, toolbar(), panelEl, main);
+  var content = h('div', { class: 'content' }, top, toolbar(), main);
+  shell = h('div', { class: 'shell' + (sideOpen ? ' side-open' : '') }, sideEl(), h('div', { class: 'scrim', onclick: function () { setSide(false); } }), content);
+  app.append(shell);
   renderMain(); renderPanel();
 }
-function newMenu() {
-  var open = false, pop = h('div', { class: 'pop left', hidden: true });
-  var btn = h('button', { class: 'btn sm', id: 'new-btn', 'aria-haspopup': 'true', onclick: function (e) { e.stopPropagation(); open = !open; pop.hidden = !open; } }, '+ New \u25be');
-  [['evidence', 'Test evidence document', 'Test cases, Pass/Fail summary, screenshots'], ['bug', 'Bug report', 'One bug: steps, expected vs actual, evidence']].forEach(function (o) {
-    pop.append(h('button', { 'data-new': o[0], onclick: function () { open = false; pop.hidden = true; newDocument(o[0]); } }, o[1], h('small', { text: o[2] })));
-  });
-  document.addEventListener('click', function () { open = false; pop.hidden = true; });
-  return h('div', { class: 'menu' }, btn, pop);
+function sideEl() {
+  panelEl = h('div', { class: 'dlist' });
+  function newBtn(type, title, desc) {
+    return h('button', { class: 'newbtn', type: 'button', 'data-new': type, onclick: function () { newDocument(type); } }, h('b', { text: '+ ' + title }), h('small', { text: desc }));
+  }
+  var pick = h('input', { type: 'file', accept: '.json,.txt,application/json,text/plain', multiple: true, class: 'hide-file', 'aria-label': 'Choose backup files to import' });
+  pick.addEventListener('change', function () { var fs = Array.prototype.slice.call(pick.files); pick.value = ''; if (fs.length) importFiles(fs); });
+  return h('aside', { class: 'side', 'aria-label': 'Documents' },
+    h('div', { class: 'side-head' }, h('div', { class: 'brand' }, h('i'), 'QA Report Desk'),
+      h('button', { class: 'btn sm ghost x', type: 'button', title: 'Close menu', 'aria-label': 'Close menu', onclick: function () { setSide(false); } }, '\u2715')),
+    h('div', { class: 'side-new' }, h('div', { class: 'side-lbl', text: 'Create new' }),
+      newBtn('evidence', 'Test evidence', 'Test cases, Pass/Fail summary, screenshots'),
+      newBtn('bug', 'Bug report', 'Steps, expected vs actual, evidence')),
+    h('div', { class: 'side-lbl', text: 'My documents' }),
+    panelEl,
+    h('div', { class: 'side-foot' },
+      h('button', { class: 'btn sm', type: 'button', title: 'Download every document and screenshot as one file', onclick: backupAll }, 'Backup all'),
+      h('button', { class: 'btn sm', type: 'button', title: 'Load a backup file (or old documents) back into this browser', onclick: function () { pick.click(); } }, 'Import'),
+      pick));
 }
 function lab(c) { return cur.type === 'bug' ? 'Bug ' + String(cur.cases.indexOf(c) + 1).padStart(2, '0') : label(cur.cases.indexOf(c)); }
 function renderBug() {
@@ -717,27 +735,20 @@ function listDocs() {
 function docResult(d) { return EX.tally((d.cases || []).map(function (c) { return { status: c.status }; })); }
 function renderPanel() {
   if (!panelEl) return;
-  panelEl.hidden = !panelOpen; panelEl.replaceChildren();
-  if (!panelOpen) return;
-  var rows = listDocs(), box = h('div', { class: 'wrap' });
-  if (!rows.length) box.append(h('div', { class: 'none', text: 'No saved documents yet. Whatever you type here saves automatically.' }));
+  panelEl.replaceChildren();
+  var rows = listDocs();
+  if (!rows.length) panelEl.append(h('div', { class: 'none', text: 'No saved documents yet. Whatever you type saves automatically.' }));
   rows.forEach(function (d) {
-    var s = countShots(d), n = (d.cases || []).length, T = docResult(d);
-    box.append(h('div', { class: 'drow' + (cur && d.id === cur.id ? ' cur' : ''), tabindex: '0', onclick: function () { switchTo(d); }, onkeydown: function (e) { if (e.key === 'Enter') switchTo(d); } },
-      h('div', { style: 'min-width:0' }, h('div', { class: 't', text: d.type === 'bug' ? 'Bugs: ' + (d.title || ((d.cases[0].bug.id ? d.cases[0].bug.id + ' ' : '') + (d.cases[0].sum || 'Untitled'))) : (d.ticket || d.title || 'Untitled') }),
-        d.type === 'bug' ? h('div', { class: 's', text: n + ' bug' + (n === 1 ? '' : 's') + ' · ' + s + ' screenshot' + (s === 1 ? '' : 's') + ' · edited ' + ago(d.updatedAt) }) : h('div', { class: 's', text: (d.ticket ? d.title + ' · ' : '') + n + ' test case' + (n === 1 ? '' : 's') + ' (' + T.rate + '% passed, ' + T.fail + ' failed) · ' + s + ' screenshot' + (s === 1 ? '' : 's') + ' · edited ' + ago(d.updatedAt) })),
+    var n = (d.cases || []).length, isBug = d.type === 'bug', title, sub;
+    if (isBug) { title = d.title || ((d.cases[0].bug.id ? d.cases[0].bug.id + ' ' : '') + (d.cases[0].sum || 'Untitled')); sub = n + ' bug' + (n === 1 ? '' : 's') + ' \u00b7 edited ' + ago(d.updatedAt); }
+    else { title = d.ticket || d.title || 'Untitled'; sub = n + ' test case' + (n === 1 ? '' : 's') + ' \u00b7 ' + docResult(d).rate + '% passed \u00b7 edited ' + ago(d.updatedAt); }
+    panelEl.append(h('div', { class: 'drow' + (cur && d.id === cur.id ? ' cur' : ''), tabindex: '0', title: title, onclick: function () { switchTo(d); }, onkeydown: function (e) { if (e.key === 'Enter') switchTo(d); } },
+      h('div', { class: 't' }, h('span', { class: 'kind ' + (isBug ? 'bug' : 'tc'), text: isBug ? 'BUG' : 'TC' }), title),
+      h('div', { class: 's', text: sub }),
       h('div', { class: 'acts' },
         h('button', { class: 'btn sm ghost', onclick: function (e) { e.stopPropagation(); duplicateDoc(d); } }, 'Duplicate'),
         twoStep(h('button', { class: 'btn sm ghost' }, 'Delete'), 'Delete for good?', function () { deleteDoc(d); }))));
   });
-  var pick = h('input', { type: 'file', accept: '.json,.txt,application/json,text/plain', multiple: true, class: 'hide-file', 'aria-label': 'Choose backup files to import' });
-  pick.addEventListener('change', function () { var fs = Array.prototype.slice.call(pick.files); pick.value = ''; if (fs.length) importFiles(fs); });
-  box.append(h('div', { class: 'panelbar', style: 'padding-top:8px;display:flex;gap:8px;flex-wrap:wrap' },
-    h('button', { class: 'btn sm', title: 'Download every document and screenshot as one file', onclick: backupAll }, 'Backup all'),
-    h('button', { class: 'btn sm', title: 'Load a backup file (or old documents) back into this browser', onclick: function () { pick.click(); } }, 'Import'),
-    pick,
-    h('button', { class: 'btn sm', onclick: function () { panelOpen = false; renderPanel(); } }, 'Close')));
-  panelEl.append(box);
 }
 /* ---------- backup / import ---------- */
 function shotIdsOf(d) { var ids = []; (d.cases || []).forEach(function (c) { (c.shots || []).forEach(function (s) { if (s.shotId) ids.push(s.shotId); }); }); return ids; }
@@ -793,8 +804,8 @@ async function importFiles(files) {
   panelOpen = true; renderPanel();
   toast('Imported ' + added + ' new, ' + updated + ' updated' + (skipped ? ', ' + skipped + ' already up to date' : '') + (bad ? ', ' + bad + ' file(s) skipped' : '') + '.');
 }
-async function switchTo(d) { if (cur && d.id === cur.id) { panelOpen = false; renderPanel(); return; } await flush(); openDoc(d); }
-async function newDocument(type) { await flush(); openDoc(newDoc(type)); var t = document.getElementById('doc-title'); if (t) { t.focus(); t.select(); } }
+async function switchTo(d) { if (cur && d.id === cur.id) { if (isNarrow()) setSide(false); return; } await flush(); if (isNarrow()) sideOpen = false; openDoc(d); }
+async function newDocument(type) { await flush(); if (isNarrow()) sideOpen = false; openDoc(newDoc(type)); var t = document.getElementById('doc-title'); if (t) { t.focus(); t.select(); } }
 async function duplicateDoc(d) {
   var c = fixDoc(clone(d)), now = Date.now();
   c.id = uid(); c.createdAt = now; c.updatedAt = now; c.title = (d.title || (d.type === 'bug' ? 'Bug' : 'Test Evidence Document')) + ' (copy)';
