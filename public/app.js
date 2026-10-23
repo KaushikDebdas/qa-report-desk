@@ -409,6 +409,7 @@ function sideEl() {
     panelEl,
     h('div', { class: 'side-foot' },
       h('button', { class: 'btn sm', type: 'button', title: 'Download every document and screenshot as one file', onclick: exportAllDocs }, 'Export all'),
+      h('button', { class: 'btn sm', type: 'button', title: 'Choose one or more documents and download them as one file', onclick: pickExport }, 'Export selected'),
       h('button', { class: 'btn sm', type: 'button', title: 'Load a file made with Export. If it holds several documents you choose which to import.', onclick: function () { pick.click(); } }, 'Import'),
       pick));
 }
@@ -813,38 +814,56 @@ async function importFiles(files) {
   if (r.docs.length === 1) { commitImport(r.docs, r.shots, r.bad); return; }
   pickImport(r);
 }
-function pickImport(r) {
-  var chosen = {}, rows = [], box0 = h('div', { class: 'mlist' });
-  r.docs.forEach(function (d) { chosen[d.id] = importState(d) !== 'same'; });
+/* One tick-list used by both Import (pick from a file) and Export (pick from your documents).
+   o = { docs, title, sub, verb, off(d)->bool, tag(d)->[text,cls]|null, initial(d)->bool, onGo(selectedDocs) } */
+function pickDocs(o) {
+  var chosen = {}, rows = [], list = h('div', { class: 'mlist' });
+  o.docs.forEach(function (d) { chosen[d.id] = !o.off(d) && o.initial(d); });
   var count = h('span', { class: 'mcount' }), go = h('button', { class: 'btn primary', type: 'button' });
   function close() { if (box.parentNode) box.parentNode.removeChild(box); document.removeEventListener('keydown', onKey); }
   function onKey(e) { if (e.key === 'Escape') close(); }
+  function selected() { return o.docs.filter(function (d) { return chosen[d.id]; }); }
   function refresh() {
-    var n = r.docs.filter(function (d) { return chosen[d.id]; }).length;
-    count.textContent = n + ' of ' + r.docs.length + ' selected'; go.textContent = 'Import selected (' + n + ')'; go.disabled = !n;
+    var n = selected().length;
+    count.textContent = n + ' of ' + o.docs.length + ' selected'; go.textContent = o.verb + ' selected (' + n + ')'; go.disabled = !n;
     rows.forEach(function (x) { x.cb.checked = !!chosen[x.id]; });
   }
-  r.docs.forEach(function (d) {
-    var st = importState(d), n = (d.cases || []).length, isBug = d.type === 'bug';
-    var cb = h('input', { type: 'checkbox', disabled: st === 'same', 'aria-label': 'Import ' + docTitleOf(d), onchange: function () { chosen[d.id] = cb.checked; refresh(); } });
+  o.docs.forEach(function (d) {
+    var off = o.off(d), n = (d.cases || []).length, isBug = d.type === 'bug', tag = o.tag(d);
+    var cb = h('input', { type: 'checkbox', disabled: off, 'aria-label': o.verb + ' ' + docTitleOf(d), onchange: function () { chosen[d.id] = cb.checked; refresh(); } });
     rows.push({ id: d.id, cb: cb });
-    var label = st === 'new' ? ['New', 'new'] : st === 'upd' ? ['Replaces your older copy', 'upd'] : ['You already have this', 'same'];
-    box0.append(h('label', { class: 'mrow' + (st === 'same' ? ' off' : '') }, cb,
+    list.append(h('label', { class: 'mrow' + (off ? ' off' : '') }, cb,
       h('div', { style: 'min-width:0' },
         h('div', { class: 'mt' }, h('span', { class: 'kind ' + (isBug ? 'bug' : 'tc'), text: isBug ? 'BUG' : 'TC' }), docTitleOf(d)),
-        h('div', { class: 'ms' }, (isBug ? n + ' bug' : n + ' test case') + (n === 1 ? '' : 's') + ' \u00b7 ' + shotIdsOf(d).length + ' screenshots \u00b7 ', h('span', { class: 'tag ' + label[1], text: label[0] })))));
+        h('div', { class: 'ms' }, (isBug ? n + ' bug' : n + ' test case') + (n === 1 ? '' : 's') + ' \u00b7 ' + shotIdsOf(d).length + ' screenshot' + (shotIdsOf(d).length === 1 ? '' : 's') + (tag ? ' \u00b7 ' : ''), tag ? h('span', { class: 'tag ' + tag[1], text: tag[0] }) : null))));
   });
-  function setAll(on) { r.docs.forEach(function (d) { chosen[d.id] = on && importState(d) !== 'same'; }); refresh(); }
-  go.addEventListener('click', function () {
-    var sel = r.docs.filter(function (d) { return chosen[d.id]; }); close(); commitImport(sel, r.shots, r.bad);
-  });
-  var box = h('div', { class: 'modal', role: 'dialog', 'aria-modal': 'true', 'aria-label': 'Choose documents to import', onclick: function (e) { if (e.target === box) close(); } },
+  function setAll(on) { o.docs.forEach(function (d) { chosen[d.id] = on && !o.off(d); }); refresh(); }
+  go.addEventListener('click', function () { var sel = selected(); close(); o.onGo(sel); });
+  var box = h('div', { class: 'modal', role: 'dialog', 'aria-modal': 'true', 'aria-label': o.title, onclick: function (e) { if (e.target === box) close(); } },
     h('div', { class: 'mbox' },
-      h('div', { class: 'mhead' }, h('h2', { text: 'Choose what to import' }), h('p', { class: 'msub', text: 'This file has ' + r.docs.length + ' documents. Tick the ones you want.' }),
+      h('div', { class: 'mhead' }, h('h2', { text: o.title }), h('p', { class: 'msub', text: o.sub }),
         h('div', { class: 'mtools' }, h('button', { class: 'btn sm ghost', type: 'button', onclick: function () { setAll(true); } }, 'Select all'), h('button', { class: 'btn sm ghost', type: 'button', onclick: function () { setAll(false); } }, 'Select none'), count)),
-      box0,
+      list,
       h('div', { class: 'mfoot' }, h('span', { class: 'grow' }), h('button', { class: 'btn', type: 'button', onclick: close }, 'Cancel'), go)));
   document.body.append(box); document.addEventListener('keydown', onKey); refresh(); go.focus();
+}
+function pickImport(r) {
+  pickDocs({
+    docs: r.docs, title: 'Choose what to import', sub: 'This file has ' + r.docs.length + ' documents. Tick the ones you want.', verb: 'Import',
+    off: function (d) { return importState(d) === 'same'; }, initial: function () { return true; },
+    tag: function (d) { var st = importState(d); return st === 'new' ? ['New', 'new'] : st === 'upd' ? ['Replaces your older copy', 'upd'] : ['You already have this', 'same']; },
+    onGo: function (sel) { commitImport(sel, r.shots, r.bad); }
+  });
+}
+async function pickExport() {
+  await flush();
+  var list = listDocs();
+  if (!list.length) { toast('Nothing to export yet.'); return; }
+  pickDocs({
+    docs: list, title: 'Choose what to export', sub: 'Tick the documents to put in one file. You can open that file in any browser with Import.', verb: 'Export',
+    off: function () { return false; }, initial: function () { return false; }, tag: function () { return null; },
+    onGo: function (sel) { exportDocs(sel, sel.length === 1 ? (safeName(docTitleOf(sel[0])) || 'document') : 'qa-report-desk-' + sel.length + '-documents-' + new Date().toISOString().slice(0, 10)); }
+  });
 }
 async function commitImport(list, inShots, bad) {
   await flush();
@@ -947,7 +966,7 @@ async function exportAs(kind, btn) {
   } catch (e) { toast(e && e.message === 'lib' ? 'Could not load the exporter. Run npm install on the server.' : 'Export failed: ' + (e && e.message || 'unknown error')); console.error(e); }
   btn.textContent = orig; btn.disabled = false; exportBusy = false;
 }
-window.__qa = { importFiles: importFiles, exportAllDocs: exportAllDocs, exportOneDoc: exportOneDoc, IDB: IDB, isLocal: function () { return useLocal; }, need: need, buildModel: buildModel, parseRich: parseRich, sanitize: sanitize };
+window.__qa = { importFiles: importFiles, exportAllDocs: exportAllDocs, pickExport: pickExport, exportOneDoc: exportOneDoc, IDB: IDB, isLocal: function () { return useLocal; }, need: need, buildModel: buildModel, parseRich: parseRich, sanitize: sanitize };
 
 /* ------------------------------------------------------------ boot */
 (async function () {
