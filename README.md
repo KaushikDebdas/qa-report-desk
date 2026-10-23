@@ -29,7 +29,7 @@ There is no login. If you expose it beyond your own machine, put it behind your 
 - Bold, italic, underline, bullets, numbered lists, text colour and highlight in description, test data and remarks.
 - Screenshots: paste (Ctrl+V), drop or browse; they fit a fixed frame; same frame is used in exports.
 - Autosave; the side menu lists "My documents" to reopen, duplicate or delete (on a phone, open it with the menu button).
-- Backup / Import: the side menu has **Backup all** (one .json file with every document and screenshot) and **Import** (load that file back, on any browser or computer). Import also accepts old `data/docs/*.json` files together with their `data/shots/*.txt` screenshots.
+- Export / Import: the side menu has **Export all** (one .json file with every document and screenshot) and **Import**. Each document also has its own **Export** button for just that one. When an imported file holds several documents, a list appears so you tick only the ones you want (documents you already have in the same or a newer version are marked and skipped). Import also accepts old `data/docs/*.json` files together with their `data/shots/*.txt` screenshots.
 - Cards collapse and expand (▾ on each card, plus Collapse all / Expand all); a collapsed card shows a one-line summary.
 - Summary is collapsible too; its header has Collapse all / Expand all for every card.
 - "+ Add below" on every test case / bug inserts a new one right after it; numbers update automatically.

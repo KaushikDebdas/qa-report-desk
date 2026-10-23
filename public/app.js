@@ -408,8 +408,8 @@ function sideEl() {
     h('div', { class: 'side-lbl', text: 'My documents' }),
     panelEl,
     h('div', { class: 'side-foot' },
-      h('button', { class: 'btn sm', type: 'button', title: 'Download every document and screenshot as one file', onclick: backupAll }, 'Backup all'),
-      h('button', { class: 'btn sm', type: 'button', title: 'Load a backup file (or old documents) back into this browser', onclick: function () { pick.click(); } }, 'Import'),
+      h('button', { class: 'btn sm', type: 'button', title: 'Download every document and screenshot as one file', onclick: exportAllDocs }, 'Export all'),
+      h('button', { class: 'btn sm', type: 'button', title: 'Load a file made with Export. If it holds several documents you choose which to import.', onclick: function () { pick.click(); } }, 'Import'),
       pick));
 }
 function lab(c) { return cur.type === 'bug' ? 'Bug ' + String(cur.cases.indexOf(c) + 1).padStart(2, '0') : label(cur.cases.indexOf(c)); }
@@ -739,35 +739,47 @@ function renderPanel() {
   var rows = listDocs();
   if (!rows.length) panelEl.append(h('div', { class: 'none', text: 'No saved documents yet. Whatever you type saves automatically.' }));
   rows.forEach(function (d) {
-    var n = (d.cases || []).length, isBug = d.type === 'bug', title, sub;
-    if (isBug) { title = d.title || ((d.cases[0].bug.id ? d.cases[0].bug.id + ' ' : '') + (d.cases[0].sum || 'Untitled')); sub = n + ' bug' + (n === 1 ? '' : 's') + ' \u00b7 edited ' + ago(d.updatedAt); }
-    else { title = d.ticket || d.title || 'Untitled'; sub = n + ' test case' + (n === 1 ? '' : 's') + ' \u00b7 ' + docResult(d).rate + '% passed \u00b7 edited ' + ago(d.updatedAt); }
+    var n = (d.cases || []).length, isBug = d.type === 'bug', title = docTitleOf(d), sub;
+    if (isBug) sub = n + ' bug' + (n === 1 ? '' : 's') + ' \u00b7 edited ' + ago(d.updatedAt);
+    else sub = n + ' test case' + (n === 1 ? '' : 's') + ' \u00b7 ' + docResult(d).rate + '% passed \u00b7 edited ' + ago(d.updatedAt);
     panelEl.append(h('div', { class: 'drow' + (cur && d.id === cur.id ? ' cur' : ''), tabindex: '0', title: title, onclick: function () { switchTo(d); }, onkeydown: function (e) { if (e.key === 'Enter') switchTo(d); } },
       h('div', { class: 't' }, h('span', { class: 'kind ' + (isBug ? 'bug' : 'tc'), text: isBug ? 'BUG' : 'TC' }), title),
       h('div', { class: 's', text: sub }),
       h('div', { class: 'acts' },
         h('button', { class: 'btn sm ghost', onclick: function (e) { e.stopPropagation(); duplicateDoc(d); } }, 'Duplicate'),
+        h('button', { class: 'btn sm ghost', title: 'Download just this document, with its screenshots', onclick: function (e) { e.stopPropagation(); exportOneDoc(d); } }, 'Export'),
         twoStep(h('button', { class: 'btn sm ghost' }, 'Delete'), 'Delete for good?', function () { deleteDoc(d); }))));
   });
 }
 /* ---------- backup / import ---------- */
 function shotIdsOf(d) { var ids = []; (d.cases || []).forEach(function (c) { (c.shots || []).forEach(function (s) { if (s.shotId) ids.push(s.shotId); }); }); return ids; }
-async function backupAll() {
+function safeName(x) { return String(x || '').trim().replace(/[^\w.\- ]+/g, '_').replace(/\s+/g, '_').slice(0, 60); }
+function docTitleOf(d) {
+  if (d.type === 'bug') return d.title || ((d.cases[0].bug.id ? d.cases[0].bug.id + ' ' : '') + (d.cases[0].sum || 'Untitled bug'));
+  return d.ticket || d.title || 'Untitled';
+}
+/* Export: one or many documents (with their screenshots) as a single .json file that Import can read back. */
+async function exportDocs(list, fileBase) {
   try {
     await flush();
-    var list = listDocs().map(function (d) { return clone(d); }), shots = {};
+    var out = [], shots = {};
     for (var i = 0; i < list.length; i++) {
-      var ids = shotIdsOf(list[i]);
+      var d = clone(list[i]), ids = shotIdsOf(d);
       for (var j = 0; j < ids.length; j++) { var u = await Shots.get(ids[j]); if (u) shots[ids[j]] = u; }
+      out.push(d);
     }
-    if (!list.length) { toast('Nothing to back up yet.'); return; }
-    var name = 'qa-report-desk-backup-' + new Date().toISOString().slice(0, 10) + '.json';
-    download(new Blob([JSON.stringify({ app: 'qa-report-desk', version: 1, exportedAt: new Date().toISOString(), docs: list, shots: shots })], { type: 'application/json' }), name);
-    toast('Backup saved: ' + name + ' (' + list.length + ' document' + (list.length === 1 ? '' : 's') + ')');
-  } catch (e) { toast('Backup failed: ' + (e && e.message || 'unknown error')); }
+    if (!out.length) { toast('Nothing to export yet.'); return; }
+    var name = fileBase + '.backup.json';
+    download(new Blob([JSON.stringify({ app: 'qa-report-desk', version: 1, exportedAt: new Date().toISOString(), docs: out, shots: shots })], { type: 'application/json' }), name);
+    toast('Exported ' + out.length + ' document' + (out.length === 1 ? '' : 's') + ': ' + name);
+  } catch (e) { toast('Export failed: ' + (e && e.message || 'unknown error')); }
 }
+function exportAllDocs() { return exportDocs(listDocs(), 'qa-report-desk-all-' + new Date().toISOString().slice(0, 10)); }
+function exportOneDoc(d) { return exportDocs([d], safeName(docTitleOf(d)) || 'document'); }
+
+function shotIdsOf(d) { var ids = []; (d.cases || []).forEach(function (c) { (c.shots || []).forEach(function (s) { if (s.shotId) ids.push(s.shotId); }); }); return ids; }
 function validId(x) { return typeof x === 'string' && /^[A-Za-z0-9_-]{1,64}$/.test(x); }
-async function importFiles(files) {
+async function readImport(files) {
   var inDocs = [], inShots = {}, bad = 0;
   for (var i = 0; i < files.length; i++) {
     var f = files[i], text;
@@ -784,25 +796,74 @@ async function importFiles(files) {
       else bad++;
     } catch (e) { bad++; }
   }
-  inDocs = inDocs.filter(function (d) { return d && d.kind === 'doc' && validId(d.id); });
-  if (!inDocs.length) { toast('No documents found in that file.' + (bad ? ' Choose a backup .json file.' : '')); return; }
+  inDocs = inDocs.filter(function (d) { return d && d.kind === 'doc' && validId(d.id); }).map(fixDoc);
+  return { docs: inDocs, shots: inShots, bad: bad };
+}
+function haveLocal(id) { return docs.filter(function (x) { return x.id === id; })[0] || (cur && cur.id === id && persisted ? cur : null); }
+function importState(d) {                                           /* 'new' | 'upd' (replaces an older copy) | 'same' (you already have it, same or newer) */
+  var have = haveLocal(d.id);
+  return !have ? 'new' : ((have.updatedAt || 0) >= (d.updatedAt || 0) ? 'same' : 'upd');
+}
+async function importFiles(files) {
+  var r = await readImport(files);
+  if (!r.docs.length) { toast('No documents found in that file.' + (r.bad ? ' Choose a file made with Export.' : '')); return; }
+  await flush();
+  var fresh = r.docs.filter(function (d) { return importState(d) !== 'same'; });
+  if (!fresh.length) { toast(r.docs.length === 1 ? 'You already have this document (same or newer).' : 'Everything in that file is already here (same or newer).'); return; }
+  if (r.docs.length === 1) { commitImport(r.docs, r.shots, r.bad); return; }
+  pickImport(r);
+}
+function pickImport(r) {
+  var chosen = {}, rows = [], box0 = h('div', { class: 'mlist' });
+  r.docs.forEach(function (d) { chosen[d.id] = importState(d) !== 'same'; });
+  var count = h('span', { class: 'mcount' }), go = h('button', { class: 'btn primary', type: 'button' });
+  function close() { if (box.parentNode) box.parentNode.removeChild(box); document.removeEventListener('keydown', onKey); }
+  function onKey(e) { if (e.key === 'Escape') close(); }
+  function refresh() {
+    var n = r.docs.filter(function (d) { return chosen[d.id]; }).length;
+    count.textContent = n + ' of ' + r.docs.length + ' selected'; go.textContent = 'Import selected (' + n + ')'; go.disabled = !n;
+    rows.forEach(function (x) { x.cb.checked = !!chosen[x.id]; });
+  }
+  r.docs.forEach(function (d) {
+    var st = importState(d), n = (d.cases || []).length, isBug = d.type === 'bug';
+    var cb = h('input', { type: 'checkbox', disabled: st === 'same', 'aria-label': 'Import ' + docTitleOf(d), onchange: function () { chosen[d.id] = cb.checked; refresh(); } });
+    rows.push({ id: d.id, cb: cb });
+    var label = st === 'new' ? ['New', 'new'] : st === 'upd' ? ['Replaces your older copy', 'upd'] : ['You already have this', 'same'];
+    box0.append(h('label', { class: 'mrow' + (st === 'same' ? ' off' : '') }, cb,
+      h('div', { style: 'min-width:0' },
+        h('div', { class: 'mt' }, h('span', { class: 'kind ' + (isBug ? 'bug' : 'tc'), text: isBug ? 'BUG' : 'TC' }), docTitleOf(d)),
+        h('div', { class: 'ms' }, (isBug ? n + ' bug' : n + ' test case') + (n === 1 ? '' : 's') + ' \u00b7 ' + shotIdsOf(d).length + ' screenshots \u00b7 ', h('span', { class: 'tag ' + label[1], text: label[0] })))));
+  });
+  function setAll(on) { r.docs.forEach(function (d) { chosen[d.id] = on && importState(d) !== 'same'; }); refresh(); }
+  go.addEventListener('click', function () {
+    var sel = r.docs.filter(function (d) { return chosen[d.id]; }); close(); commitImport(sel, r.shots, r.bad);
+  });
+  var box = h('div', { class: 'modal', role: 'dialog', 'aria-modal': 'true', 'aria-label': 'Choose documents to import', onclick: function (e) { if (e.target === box) close(); } },
+    h('div', { class: 'mbox' },
+      h('div', { class: 'mhead' }, h('h2', { text: 'Choose what to import' }), h('p', { class: 'msub', text: 'This file has ' + r.docs.length + ' documents. Tick the ones you want.' }),
+        h('div', { class: 'mtools' }, h('button', { class: 'btn sm ghost', type: 'button', onclick: function () { setAll(true); } }, 'Select all'), h('button', { class: 'btn sm ghost', type: 'button', onclick: function () { setAll(false); } }, 'Select none'), count)),
+      box0,
+      h('div', { class: 'mfoot' }, h('span', { class: 'grow' }), h('button', { class: 'btn', type: 'button', onclick: close }, 'Cancel'), go)));
+  document.body.append(box); document.addEventListener('keydown', onKey); refresh(); go.focus();
+}
+async function commitImport(list, inShots, bad) {
   await flush();
   var added = 0, updated = 0, skipped = 0, newest = null;
-  for (var k = 0; k < inDocs.length; k++) {
-    var d = fixDoc(inDocs[k]), have = docs.filter(function (x) { return x.id === d.id; })[0] || (cur && cur.id === d.id && persisted ? cur : null);
-    if (have && (have.updatedAt || 0) >= (d.updatedAt || 0)) { skipped++; continue; }
+  for (var k = 0; k < list.length; k++) {
+    var d = list[k], st = importState(d);
+    if (st === 'same') { skipped++; continue; }
     try {
       var ids = shotIdsOf(d);
       for (var m = 0; m < ids.length; m++) { var u = inShots[ids[m]]; if (validId(ids[m]) && typeof u === 'string' && /^data:image\//.test(u)) await Shots.put(ids[m], u); }
       await Store.put(d.id, d);
-      if (have) updated++; else added++;
+      if (st === 'upd') updated++; else added++;
       if (!newest || (d.updatedAt || 0) > (newest.updatedAt || 0)) newest = d;
     } catch (e) { bad++; }
   }
   try { docs = (await Store.list()).filter(function (x) { return x && x.kind === 'doc'; }).map(fixDoc); } catch (e) { /* keep list */ }
   if (newest) openDoc(newest);
-  panelOpen = true; renderPanel();
-  toast('Imported ' + added + ' new, ' + updated + ' updated' + (skipped ? ', ' + skipped + ' already up to date' : '') + (bad ? ', ' + bad + ' file(s) skipped' : '') + '.');
+  renderPanel();
+  toast('Imported ' + added + ' new' + (updated ? ', ' + updated + ' updated' : '') + (skipped ? ', ' + skipped + ' skipped' : '') + (bad ? ', ' + bad + ' file(s) had problems' : '') + '.');
 }
 async function switchTo(d) { if (cur && d.id === cur.id) { if (isNarrow()) setSide(false); return; } await flush(); if (isNarrow()) sideOpen = false; openDoc(d); }
 async function newDocument(type) { await flush(); if (isNarrow()) sideOpen = false; openDoc(newDoc(type)); var t = document.getElementById('doc-title'); if (t) { t.focus(); t.select(); } }
@@ -886,7 +947,7 @@ async function exportAs(kind, btn) {
   } catch (e) { toast(e && e.message === 'lib' ? 'Could not load the exporter. Run npm install on the server.' : 'Export failed: ' + (e && e.message || 'unknown error')); console.error(e); }
   btn.textContent = orig; btn.disabled = false; exportBusy = false;
 }
-window.__qa = { importFiles: importFiles, backupAll: backupAll, IDB: IDB, isLocal: function () { return useLocal; }, need: need, buildModel: buildModel, parseRich: parseRich, sanitize: sanitize };
+window.__qa = { importFiles: importFiles, exportAllDocs: exportAllDocs, exportOneDoc: exportOneDoc, IDB: IDB, isLocal: function () { return useLocal; }, need: need, buildModel: buildModel, parseRich: parseRich, sanitize: sanitize };
 
 /* ------------------------------------------------------------ boot */
 (async function () {
