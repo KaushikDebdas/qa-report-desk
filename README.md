@@ -7,7 +7,7 @@ Open the published GitHub Pages link. Nothing to install or start.
 Documents and screenshots are saved **in your own browser** (not on a server), so they are private to you and stay on that computer and browser.
 Use **Export** (Word / Excel / HTML) to keep or share a copy. Clearing site data in the browser deletes saved documents.
 
-Publishing: push to the `main` branch; in the repo go to Settings > Pages > Source and choose **GitHub Actions**. The workflow in `.github/workflows/pages.yml` publishes the `public` folder.
+Publishing: push to the `main` or `master` branch; in the repo go to Settings > Pages > Source and choose **GitHub Actions**. The workflow in `.github/workflows/pages.yml` publishes the `public` folder.
 
 ## Run on your own machine or server (optional)
 Only needed if you want documents stored in a shared `data` folder instead of each browser.
