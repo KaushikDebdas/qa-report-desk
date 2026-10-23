@@ -239,6 +239,11 @@ var Shots = {
     if (useLocal) return IDB.put('shots', id, p.url).then(function () { self.cache.set(id, p.url); return id; });
     return fetch('/api/shots/' + id, { method: 'PUT', headers: { 'Content-Type': 'text/plain' }, body: p.url }).then(okJson).then(function () { self.cache.set(id, p.url); return id; });
   },
+  put: function (id, url) {
+    var self = this;
+    if (useLocal) return IDB.put('shots', id, url).then(function () { self.cache.set(id, url); });
+    return fetch('/api/shots/' + id, { method: 'PUT', headers: { 'Content-Type': 'text/plain' }, body: url }).then(okJson).then(function () { self.cache.set(id, url); });
+  },
   drop: function (id) { this.cache.delete(id); return useLocal ? IDB.del('shots', id).catch(function () {}) : fetch('/api/shots/' + id, { method: 'DELETE' }).catch(function () {}); }
 };
 
@@ -680,8 +685,68 @@ function renderPanel() {
         h('button', { class: 'btn sm ghost', onclick: function (e) { e.stopPropagation(); duplicateDoc(d); } }, 'Duplicate'),
         twoStep(h('button', { class: 'btn sm ghost' }, 'Delete'), 'Delete for good?', function () { deleteDoc(d); }))));
   });
-  box.append(h('div', { style: 'padding-top:8px' }, h('button', { class: 'btn sm', onclick: function () { panelOpen = false; renderPanel(); } }, 'Close')));
+  var pick = h('input', { type: 'file', accept: '.json,.txt,application/json,text/plain', multiple: true, class: 'hide-file', 'aria-label': 'Choose backup files to import' });
+  pick.addEventListener('change', function () { var fs = Array.prototype.slice.call(pick.files); pick.value = ''; if (fs.length) importFiles(fs); });
+  box.append(h('div', { class: 'panelbar', style: 'padding-top:8px;display:flex;gap:8px;flex-wrap:wrap' },
+    h('button', { class: 'btn sm', title: 'Download every document and screenshot as one file', onclick: backupAll }, 'Backup all'),
+    h('button', { class: 'btn sm', title: 'Load a backup file (or old documents) back into this browser', onclick: function () { pick.click(); } }, 'Import'),
+    pick,
+    h('button', { class: 'btn sm', onclick: function () { panelOpen = false; renderPanel(); } }, 'Close')));
   panelEl.append(box);
+}
+/* ---------- backup / import ---------- */
+function shotIdsOf(d) { var ids = []; (d.cases || []).forEach(function (c) { (c.shots || []).forEach(function (s) { if (s.shotId) ids.push(s.shotId); }); }); return ids; }
+async function backupAll() {
+  try {
+    await flush();
+    var list = listDocs().map(function (d) { return clone(d); }), shots = {};
+    for (var i = 0; i < list.length; i++) {
+      var ids = shotIdsOf(list[i]);
+      for (var j = 0; j < ids.length; j++) { var u = await Shots.get(ids[j]); if (u) shots[ids[j]] = u; }
+    }
+    if (!list.length) { toast('Nothing to back up yet.'); return; }
+    var name = 'qa-report-desk-backup-' + new Date().toISOString().slice(0, 10) + '.json';
+    download(new Blob([JSON.stringify({ app: 'qa-report-desk', version: 1, exportedAt: new Date().toISOString(), docs: list, shots: shots })], { type: 'application/json' }), name);
+    toast('Backup saved: ' + name + ' (' + list.length + ' document' + (list.length === 1 ? '' : 's') + ')');
+  } catch (e) { toast('Backup failed: ' + (e && e.message || 'unknown error')); }
+}
+function validId(x) { return typeof x === 'string' && /^[A-Za-z0-9_-]{1,64}$/.test(x); }
+async function importFiles(files) {
+  var inDocs = [], inShots = {}, bad = 0;
+  for (var i = 0; i < files.length; i++) {
+    var f = files[i], text;
+    try { text = await f.text(); } catch (e) { bad++; continue; }
+    if (/\.txt$/i.test(f.name)) {                                   /* screenshot file from the old data/shots folder */
+      var sid = f.name.replace(/\.txt$/i, '');
+      if (validId(sid) && /^data:image\//.test(text.trim())) inShots[sid] = text.trim(); else bad++;
+      continue;
+    }
+    try {
+      var j = JSON.parse(text);
+      if (j && Array.isArray(j.docs)) { j.docs.forEach(function (d) { inDocs.push(d); }); Object.keys(j.shots || {}).forEach(function (k) { inShots[k] = j.shots[k]; }); }
+      else if (j && j.kind === 'doc') inDocs.push(j);
+      else bad++;
+    } catch (e) { bad++; }
+  }
+  inDocs = inDocs.filter(function (d) { return d && d.kind === 'doc' && validId(d.id); });
+  if (!inDocs.length) { toast('No documents found in that file.' + (bad ? ' Choose a backup .json file.' : '')); return; }
+  await flush();
+  var added = 0, updated = 0, skipped = 0, newest = null;
+  for (var k = 0; k < inDocs.length; k++) {
+    var d = fixDoc(inDocs[k]), have = docs.filter(function (x) { return x.id === d.id; })[0] || (cur && cur.id === d.id && persisted ? cur : null);
+    if (have && (have.updatedAt || 0) >= (d.updatedAt || 0)) { skipped++; continue; }
+    try {
+      var ids = shotIdsOf(d);
+      for (var m = 0; m < ids.length; m++) { var u = inShots[ids[m]]; if (validId(ids[m]) && typeof u === 'string' && /^data:image\//.test(u)) await Shots.put(ids[m], u); }
+      await Store.put(d.id, d);
+      if (have) updated++; else added++;
+      if (!newest || (d.updatedAt || 0) > (newest.updatedAt || 0)) newest = d;
+    } catch (e) { bad++; }
+  }
+  try { docs = (await Store.list()).filter(function (x) { return x && x.kind === 'doc'; }).map(fixDoc); } catch (e) { /* keep list */ }
+  if (newest) openDoc(newest);
+  panelOpen = true; renderPanel();
+  toast('Imported ' + added + ' new, ' + updated + ' updated' + (skipped ? ', ' + skipped + ' already up to date' : '') + (bad ? ', ' + bad + ' file(s) skipped' : '') + '.');
 }
 async function switchTo(d) { if (cur && d.id === cur.id) { panelOpen = false; renderPanel(); return; } await flush(); openDoc(d); }
 async function newDocument(type) { await flush(); openDoc(newDoc(type)); var t = document.getElementById('doc-title'); if (t) { t.focus(); t.select(); } }
@@ -765,7 +830,7 @@ async function exportAs(kind, btn) {
   } catch (e) { toast(e && e.message === 'lib' ? 'Could not load the exporter. Run npm install on the server.' : 'Export failed: ' + (e && e.message || 'unknown error')); console.error(e); }
   btn.textContent = orig; btn.disabled = false; exportBusy = false;
 }
-window.__qa = { IDB: IDB, isLocal: function () { return useLocal; }, need: need, buildModel: buildModel, parseRich: parseRich, sanitize: sanitize };
+window.__qa = { importFiles: importFiles, backupAll: backupAll, IDB: IDB, isLocal: function () { return useLocal; }, need: need, buildModel: buildModel, parseRich: parseRich, sanitize: sanitize };
 
 /* ------------------------------------------------------------ boot */
 (async function () {
