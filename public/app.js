@@ -459,6 +459,7 @@ function bugEl(c) {
     h('button', { class: 'btn sm ghost', title: 'Back to summary', onclick: function () { document.getElementById('summary').scrollIntoView({ behavior: 'smooth', block: 'start' }); } }, '↑ Summary'),
     h('button', { class: 'btn sm ghost', title: 'Move up', 'aria-label': 'Move bug up', disabled: idx === 0, onclick: function () { moveCase(c, -1); } }, '↑'),
     h('button', { class: 'btn sm ghost', title: 'Move down', 'aria-label': 'Move bug down', disabled: idx === n - 1, onclick: function () { moveCase(c, 1); } }, '↓'),
+    h('button', { class: 'btn sm ghost', title: 'Add a new bug right below this one', onclick: function () { insertAfter(c); } }, '+ Add below'),
     h('button', { class: 'btn sm ghost', title: 'Copy this bug without screenshots', onclick: function () { copyCase(c); } }, 'Copy'),
     twoStep(h('button', { class: 'btn sm ghost', disabled: n === 1 }, 'Delete'), 'Delete it?', function () { removeCase(c); }));
   var cc = collapseCtl(c);
@@ -567,6 +568,7 @@ function caseEl(c) {
     h('button', { class: 'btn sm ghost', title: 'Back to summary', onclick: function () { document.getElementById('summary').scrollIntoView({ behavior: 'smooth', block: 'start' }); } }, '↑ Summary'),
     h('button', { class: 'btn sm ghost', title: 'Move up', 'aria-label': 'Move test case up', disabled: idx === 0, onclick: function () { moveCase(c, -1); } }, '↑'),
     h('button', { class: 'btn sm ghost', title: 'Move down', 'aria-label': 'Move test case down', disabled: idx === n - 1, onclick: function () { moveCase(c, 1); } }, '↓'),
+    h('button', { class: 'btn sm ghost', title: 'Add a new test case right below this one', onclick: function () { insertAfter(c); } }, '+ Add below'),
     h('button', { class: 'btn sm ghost', title: 'Copy this test case without screenshots', onclick: function () { copyCase(c); } }, 'Copy'),
     twoStep(h('button', { class: 'btn sm ghost', disabled: n === 1 }, 'Delete'), 'Delete it?', function () { removeCase(c); }));
   var cc = collapseCtl(c);
@@ -586,6 +588,11 @@ function moveCase(c, d) {
   var i = cur.cases.indexOf(c), j = i + d; if (j < 0 || j >= cur.cases.length) return;
   cur.cases.splice(i, 1); cur.cases.splice(j, 0, c); renderCases(); refreshSummary(); markDirty();
   var e = document.getElementById('case-' + c.id); if (e) e.scrollIntoView({ block: 'nearest' });
+}
+function insertAfter(c) {
+  var k = cur.type === 'bug' ? newBugCase() : newCase();
+  cur.cases.splice(cur.cases.indexOf(c) + 1, 0, k); activeCase = k.id;
+  renderCases(); refreshSummary(); markDirty(); focusCase(k.id);
 }
 function copyCase(c) {
   var k = cur.type === 'bug' ? newBugCase({ sum: c.sum, bug: Object.assign(clone(c.bug), { id: '', status: 'Open' }) }) : newCase({ title: c.title, data: c.data, notes: '', hasParams: c.hasParams, params: clone(c.params) });
