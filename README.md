@@ -33,3 +33,4 @@ There is no login. If you expose it beyond your own machine, put it behind your 
 - Cards collapse and expand (▾ on each card, plus Collapse all / Expand all); a collapsed card shows a one-line summary.
 - Summary is collapsible too; its header has Collapse all / Expand all for every card.
 - "+ Add below" on every test case / bug inserts a new one right after it; numbers update automatically.
+- Filters: inside a document, search box (description, test data, remarks, captions; or bug fields), Pass/Fail/Blocked/Not run chips with counts, severity / priority / status for bugs, and a screenshots filter. The summary list follows the filter, and "Showing 7 of 99" tells you what is hidden. In the side menu, search all documents by name or by anything inside them, and filter by type. Filters only change what you see; they are never saved or exported.

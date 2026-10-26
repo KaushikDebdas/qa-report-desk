@@ -371,7 +371,7 @@ function collapseAllBtns() {
   function all(on) { cur.cases.forEach(function (c) { setCollapsed(c, on); }); }
   return [h('button', { class: 'btn sm ghost', type: 'button', title: 'Collapse every card', onclick: function () { all(true); } }, 'Collapse all'), h('button', { class: 'btn sm ghost', type: 'button', title: 'Expand every card', onclick: function () { all(false); } }, 'Expand all')];
 }
-function openDoc(d) { cur = fixDoc(clone(d)); activeCase = null; views = {}; collapsed = {}; sumCollapsed = false; panelOpen = false; persisted = docs.some(function (x) { return x.id === d.id; }); render(); }
+function openDoc(d) { cur = fixDoc(clone(d)); activeCase = null; views = {}; collapsed = {}; sumCollapsed = false; filt = newFilter(); panelOpen = false; persisted = docs.some(function (x) { return x.id === d.id; }); render(); }
 var shell, sideOpen = (function () { try { if (window.matchMedia && matchMedia('(max-width: 899px)').matches) return false; return localStorage.getItem('qrdSide') !== '0'; } catch (e) { return true; } })();
 function isNarrow() { return !!(window.matchMedia && matchMedia('(max-width: 899px)').matches); }
 function setSide(on) {
@@ -394,6 +394,11 @@ function render() {
 }
 function sideEl() {
   panelEl = h('div', { class: 'dlist' });
+  var dq = h('input', { class: 'in', type: 'search', placeholder: 'Search documents\u2026', 'aria-label': 'Search documents', value: docQ }), dqt = 0;
+  dq.addEventListener('input', function () { clearTimeout(dqt); dqt = setTimeout(function () { docQ = dq.value; renderPanel(); }, 140); });
+  var dt = h('select', { class: 'sel', 'aria-label': 'Filter documents by type', onchange: function () { docType = dt.value; renderPanel(); } },
+    h('option', { value: '', text: 'All types' }), h('option', { value: 'evidence', text: 'Test evidence' }), h('option', { value: 'bug', text: 'Bug report' }));
+  dt.value = docType;
   function newBtn(type, title, desc) {
     return h('button', { class: 'newbtn', type: 'button', 'data-new': type, onclick: function () { newDocument(type); } }, h('b', { text: '+ ' + title }), h('small', { text: desc }));
   }
@@ -405,7 +410,8 @@ function sideEl() {
     h('div', { class: 'side-new' }, h('div', { class: 'side-lbl', text: 'Create new' }),
       newBtn('evidence', 'Test evidence', 'Test cases, Pass/Fail summary, screenshots'),
       newBtn('bug', 'Bug report', 'Steps, expected vs actual, evidence')),
-    h('div', { class: 'side-lbl', text: 'My documents' }),
+    docLbl = h('div', { class: 'side-lbl', text: 'My documents' }),
+    h('div', { class: 'dfilter' }, dq, dt),
     panelEl,
     h('div', { class: 'side-foot' },
       h('button', { class: 'btn sm', type: 'button', title: 'Download every document and screenshot as one file', onclick: exportAllDocs }, 'Export all'),
@@ -425,9 +431,10 @@ function renderBug() {
   casesBox = h('div');
   main.append(h('div', { class: 'sheet bugsheet' }, h('div', { class: 'lbl', text: 'Bug report' }), title,
     sumBox,
+    filterBar(),
     h('div', { class: 'bartools' }, countEl, h('label', { class: 'lbl', for: 'doc-ratio', text: 'Screenshot frame' }), ratio),
     casesBox,
-    h('button', { class: 'btn addcase', onclick: function () { var c = newBugCase(); cur.cases.push(c); activeCase = c.id; renderCases(); refreshSummary(); markDirty(); focusCase(c.id); } }, '+ Add bug')));
+    h('button', { class: 'btn addcase', onclick: function () { clearFilters(); var c = newBugCase(); cur.cases.push(c); activeCase = c.id; renderCases(); refreshSummary(); markDirty(); focusCase(c.id); } }, '+ Add bug')));
   applyRatio(); renderCases(); refreshSummary();
 }
 function sevBadge(k) { var v = EX.SEV[k]; return h('span', { class: 'badge none', style: v ? 'background:#' + v.fill + ';color:#' + v.ink : '', text: k || '–' }); }
@@ -443,6 +450,7 @@ function drawBugSummary() {
     sumHead(),
     h('div', { class: 'sumtop' }, pills),
     h('div', { class: 'srows' }, L.map(function (c, i) {
+      if (!matches(c)) return null;
       var b = c.bug;
       return h('button', { class: 'srow', type: 'button', title: 'Jump to ' + lab(c), style: 'grid-template-columns:42px minmax(0,1fr) auto auto', onclick: function () { jumpTo(c.id); } },
         h('span', { class: 'no2', text: String(i + 1).padStart(2, '0') }),
@@ -515,14 +523,117 @@ function renderMain() {
   main.append(h('div', { class: 'sheet' }, title, ticket,
     h('div', { class: 'meta' }, mf('tester', 'Tested by', 'Name'), mf('date', 'Date', '', 'date'), mf('env', 'Environment / build', 'e.g. UAT · 1.0.0')),
     sumBox,
+    filterBar(),
     h('div', { class: 'bartools' }, countEl, h('label', { class: 'lbl', for: 'doc-ratio', text: 'Screenshot frame' }), ratio),
     casesBox,
-    h('button', { class: 'btn addcase', onclick: function () { var c = newCase(); cur.cases.push(c); activeCase = c.id; renderCases(); refreshSummary(); markDirty(); focusCase(c.id); } }, '+ Add test case')));
+    h('button', { class: 'btn addcase', onclick: function () { clearFilters(); var c = newCase(); cur.cases.push(c); activeCase = c.id; renderCases(); refreshSummary(); markDirty(); focusCase(c.id); } }, '+ Add test case')));
   applyRatio(); renderCases(); refreshSummary();
 }
 function focusCase(id) { var e = document.querySelector('#case-' + id + ' .bsum, #case-' + id + ' .rich'); if (e) { e.focus(); e.scrollIntoView({ block: 'center', behavior: 'smooth' }); } }
 function applyRatio() { main.style.setProperty('--ratio', cur.ratio === 'natural' ? '16/9' : cur.ratio); main.classList.toggle('natural', cur.ratio === 'natural'); }
 function renderCases() { casesBox.replaceChildren(); views = {}; cur.cases.forEach(function (c) { casesBox.append(cur.type === 'bug' ? bugEl(c) : caseEl(c)); }); }
+
+/* ---------- filters (view only, never saved or exported) ---------- */
+function newFilter() { return { q: '', st: {}, sev: '', pri: '', bstat: '', shots: '' }; }
+var filt = newFilter(), fui = null, docQ = '', docType = '', docLbl = null;
+function isFiltering() {
+  return !!(filt.q.trim() || Object.keys(filt.st).some(function (k) { return filt.st[k]; }) || filt.sev || filt.pri || filt.bstat || filt.shots);
+}
+function rtext(html) { try { return EX.plain(richBlocks(html || '')); } catch (e) { return ''; } }
+function caseText(c, type) {
+  var t = [];
+  if (type === 'bug') { var b = c.bug; t.push(c.sum, b.id, b.module, b.env, b.build, b.severity, b.priority, b.status, b.reporter, b.assignee, rtext(b.pre), rtext(b.steps), rtext(b.expected), rtext(b.actual), rtext(b.notes)); }
+  else { t.push(rtext(c.title), rtext(c.data), rtext(c.notes)); (c.params || []).forEach(function (p) { t.push(p.k, p.v); }); }
+  (c.shots || []).forEach(function (sh) { t.push(sh.caption); });
+  return t.join(' \n ').toLowerCase();
+}
+function tokens(q) { return String(q || '').toLowerCase().split(/\s+/).filter(Boolean); }
+function hasAll(text, toks) { for (var i = 0; i < toks.length; i++) if (text.indexOf(toks[i]) < 0) return false; return true; }
+function matches(c) {
+  var bug = cur.type === 'bug', toks = tokens(filt.q);
+  if (toks.length && !hasAll(caseText(c, cur.type) + ' #' + (cur.cases.indexOf(c) + 1), toks)) return false;
+  if (bug) {
+    if (filt.sev && c.bug.severity !== filt.sev) return false;
+    if (filt.pri && c.bug.priority !== filt.pri) return false;
+    if (filt.bstat && c.bug.status !== filt.bstat) return false;
+  } else if (Object.keys(filt.st).some(function (k) { return filt.st[k]; }) && !filt.st[ST[c.status] ? c.status : 'none']) return false;
+  if (filt.shots === 'with' && !c.shots.length) return false;
+  if (filt.shots === 'without' && c.shots.length) return false;
+  return true;
+}
+function filterBar() {
+  var bug = cur.type === 'bug', row = [];
+  fui = { chips: {}, selects: {} };
+  var q = h('input', { class: 'in fsearch', type: 'search', 'aria-label': 'Search this document', value: filt.q,
+    placeholder: bug ? 'Search summary, steps, expected, actual, notes, ID\u2026' : 'Search description, test data, remarks, captions\u2026' });
+  var qt = 0;
+  q.addEventListener('input', function () { clearTimeout(qt); qt = setTimeout(function () { filt.q = q.value; filterChanged(); }, 140); });
+  q.addEventListener('keydown', function (e) { if (e.key === 'Escape' && q.value) { q.value = ''; filt.q = ''; filterChanged(); } });
+  fui.q = q;
+  function fsel(key, label, opts) {
+    var sel = h('select', { class: 'sel', 'aria-label': label, onchange: function () { filt[key] = sel.value; filterChanged(); } }, h('option', { value: '', text: label + ': all' }), opts.map(function (o) { return h('option', { value: o[0], text: o[1] }); }));
+    sel.value = filt[key]; fui.selects[key] = sel; return sel;
+  }
+  if (!bug) {
+    STATUSES.forEach(function (st) {
+      var b = h('button', { class: 'chip ' + st[0], type: 'button', 'aria-pressed': 'false', title: 'Show only ' + st[1], onclick: function () { filt.st[st[0]] = !filt.st[st[0]]; filterChanged(); } });
+      fui.chips[st[0]] = { el: b, label: st[1] }; row.push(b);
+    });
+  } else {
+    row.push(fsel('sev', 'Severity', SEVERITY.map(function (x) { return [x, x]; })), fsel('pri', 'Priority', PRIORITY.map(function (x) { return [x, x]; })), fsel('bstat', 'Status', BUGSTATUS.map(function (x) { return [x, x]; })));
+  }
+  row.push(fsel('shots', 'Screenshots', [['with', 'With screenshots'], ['without', 'No screenshots']]));
+  fui.count = h('span', { class: 'fcount', 'aria-live': 'polite' });
+  fui.clear = h('button', { class: 'btn sm', type: 'button', onclick: clearFilters }, 'Clear filters');
+  fui.empty = h('div', { class: 'fempty', hidden: true }, 'Nothing matches these filters. ', h('button', { class: 'btn sm', type: 'button', onclick: clearFilters }, 'Clear filters'));
+  return h('div', { class: 'fbar', role: 'search' }, h('div', { class: 'frow' }, q), h('div', { class: 'frow' }, row, h('span', { class: 'grow' }), fui.count, fui.clear), fui.empty);
+}
+function syncFilterUi() {
+  if (!fui) return;
+  fui.q.value = filt.q;
+  Object.keys(fui.selects).forEach(function (k) { fui.selects[k].value = filt[k]; });
+}
+function filterChanged() { applyFilter(); refreshSummary(); }
+function clearFilters() { if (!isFiltering()) return; filt = newFilter(); syncFilterUi(); filterChanged(); }
+function applyFilter() {
+  if (!fui || !cur) return;
+  var n = cur.cases.length, shown = 0, on = isFiltering(), counts = { pass: 0, fail: 0, blocked: 0, none: 0 };
+  cur.cases.forEach(function (c, i) {
+    var ok = matches(c); if (ok) shown++;
+    if (cur.type !== 'bug') counts[ST[c.status] ? c.status : 'none']++;
+    var el = document.getElementById('case-' + c.id);
+    if (el) {
+      el.classList.toggle('fhide', !ok);
+      var up = el.querySelector('button[title="Move up"]'), dn = el.querySelector('button[title="Move down"]');
+      if (up) up.disabled = on || i === 0;
+      if (dn) dn.disabled = on || i === n - 1;
+    }
+  });
+  Object.keys(fui.chips).forEach(function (k) {
+    var ch = fui.chips[k], active = !!filt.st[k];
+    ch.el.textContent = ch.label + ' ' + counts[k]; ch.el.classList.toggle('on', active); ch.el.setAttribute('aria-pressed', String(active));
+  });
+  fui.count.textContent = on ? 'Showing ' + shown + ' of ' + n : '';
+  fui.clear.hidden = !on;
+  fui.empty.hidden = !(on && shown === 0 && n > 0);
+}
+
+/* sidebar: find documents by name or by anything inside them */
+var docTextCache = {};
+function docSearchText(d) {
+  var hit = docTextCache[d.id];
+  if (hit && hit.u === d.updatedAt && hit.n === (d.cases || []).length) return hit.t;
+  var t = [docTitleOf(d), d.title, d.ticket, d.meta && d.meta.tester, d.meta && d.meta.env];
+  (d.cases || []).forEach(function (c) { t.push(caseText(c, d.type === 'bug' ? 'bug' : 'evidence')); });
+  var text = t.join(' \n ').toLowerCase();
+  docTextCache[d.id] = { u: d.updatedAt, n: (d.cases || []).length, t: text };
+  return text;
+}
+function docMatches(d) {
+  if (docType && (d.type === 'bug' ? 'bug' : 'evidence') !== docType) return false;
+  var toks = tokens(docQ);
+  return !toks.length || hasAll(docSearchText(d), toks);
+}
 
 /* ---------- summary (live) ---------- */
 function summaryModel() {
@@ -530,7 +641,7 @@ function summaryModel() {
 }
 function refreshSummary() {
   if (sumRaf) return;
-  sumRaf = requestAnimationFrame(function () { sumRaf = 0; drawSummary(); });
+  sumRaf = requestAnimationFrame(function () { sumRaf = 0; drawSummary(); applyFilter(); });
 }
 function drawSummary() {
   if (cur && cur.type === 'bug') { drawBugSummary(); return; }
@@ -550,6 +661,7 @@ function drawSummary() {
     h('div', { class: 'bar', 'aria-hidden': 'true' },
       h('i', { class: 'p', style: 'width:' + (T.pass / n * 100) + '%' }), h('i', { class: 'f', style: 'width:' + (T.fail / n * 100) + '%' }), h('i', { class: 'b', style: 'width:' + (T.blocked / n * 100) + '%' })),
     h('div', { class: 'srows' }, cur.cases.map(function (c, i) {
+      if (!matches(c)) return null;
       var t = EX.firstLine(richBlocks(c.title), 120);
       return h('button', { class: 'srow', type: 'button', title: 'Jump to ' + label(i), onclick: function () { jumpTo(c.id); } },
         h('span', { class: 'no2', text: String(i + 1).padStart(2, '0') }),
@@ -609,6 +721,7 @@ function moveCase(c, d) {
   var e = document.getElementById('case-' + c.id); if (e) e.scrollIntoView({ block: 'nearest' });
 }
 function insertAfter(c) {
+  clearFilters();
   var k = cur.type === 'bug' ? newBugCase() : newCase();
   cur.cases.splice(cur.cases.indexOf(c) + 1, 0, k); activeCase = k.id;
   renderCases(); refreshSummary(); markDirty(); focusCase(k.id);
@@ -737,8 +850,10 @@ function docResult(d) { return EX.tally((d.cases || []).map(function (c) { retur
 function renderPanel() {
   if (!panelEl) return;
   panelEl.replaceChildren();
-  var rows = listDocs();
-  if (!rows.length) panelEl.append(h('div', { class: 'none', text: 'No saved documents yet. Whatever you type saves automatically.' }));
+  var all = listDocs(), rows = all.filter(docMatches), on = !!(docQ.trim() || docType);
+  if (docLbl) docLbl.textContent = on ? 'My documents (' + rows.length + ' of ' + all.length + ')' : 'My documents';
+  if (!all.length) panelEl.append(h('div', { class: 'none', text: 'No saved documents yet. Whatever you type saves automatically.' }));
+  else if (!rows.length) panelEl.append(h('div', { class: 'none', text: 'No document matches. Try fewer words or clear the type filter.' }));
   rows.forEach(function (d) {
     var n = (d.cases || []).length, isBug = d.type === 'bug', title = docTitleOf(d), sub;
     if (isBug) sub = n + ' bug' + (n === 1 ? '' : 's') + ' \u00b7 edited ' + ago(d.updatedAt);
