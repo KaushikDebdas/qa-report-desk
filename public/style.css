@@ -294,3 +294,9 @@ select.in{padding:5px 7px}
 
 .tb.vb .vi{display:none;font-size:18px;line-height:1}
 @media (max-width:560px){.tb.vb .vl{display:none}.tb.vb .vi{display:inline}.vgroup{margin-left:6px}}
+
+/* summary: a section row folds its test cases */
+.srow.sec{grid-template-columns:auto minmax(0,1fr) auto;cursor:pointer;padding:4px 8px}
+.srow.sec .chev{height:26px;min-width:28px}
+.srow.sec .secjump{background:none;border:0;padding:0;font:inherit;font-weight:700;color:inherit;text-align:left;cursor:pointer;min-width:0}
+.srow.sec .secjump:hover{text-decoration:underline}

@@ -361,7 +361,7 @@ function collapseCtl(c) {
   var prev = h('div', { class: 'cprev', role: 'button', tabindex: '0', title: 'Click to expand', onclick: function () { setCollapsed(c, false); }, onkeydown: function (e) { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); setCollapsed(c, false); } } });
   return { chev: chev, prev: prev };
 }
-var sumCollapsed = false;
+var sumCollapsed = false, sumSecClosed = {};
 function paintSumChev(b) { b.textContent = sumCollapsed ? '\u25b8' : '\u25be'; b.title = sumCollapsed ? 'Expand summary' : 'Collapse summary'; b.setAttribute('aria-expanded', String(!sumCollapsed)); }
 function setSummaryCollapsed(on) {
   sumCollapsed = !!on;
@@ -378,15 +378,15 @@ function sumHead() {
 /* Collapse all / Expand all: the summary, every section heading and every card, from the bar that stays on screen */
 function collapseEverything(on) {
   if (!cur) return;
-  setSummaryCollapsed(on);
-  cur.cases.forEach(function (c) { setCollapsed(c, on); });
+  cur.cases.forEach(function (c) { if (hasSec(c)) sumSecClosed[c.id] = !!on; setCollapsed(c, on); });
+  setSummaryCollapsed(on); refreshSummary();
 }
 function viewBtns() {
   return h('div', { class: 'vgroup' }, h('span', { class: 'sep' }),
     h('button', { class: 'tb vb', type: 'button', title: 'Collapse the summary and every card', 'aria-label': 'Collapse all', onclick: function () { collapseEverything(true); } }, h('span', { class: 'vl', text: 'Collapse all' }), h('span', { class: 'vi', text: '⊟' })),
     h('button', { class: 'tb vb', type: 'button', title: 'Expand the summary and every card', 'aria-label': 'Expand all', onclick: function () { collapseEverything(false); } }, h('span', { class: 'vl', text: 'Expand all' }), h('span', { class: 'vi', text: '⊞' })));
 }
-function openDoc(d) { cur = fixDoc(clone(d)); activeCase = null; views = {}; collapsed = {}; sumCollapsed = false; filt = newFilter(); panelOpen = false; persisted = docs.some(function (x) { return x.id === d.id; }); render(); }
+function openDoc(d) { cur = fixDoc(clone(d)); activeCase = null; views = {}; collapsed = {}; sumCollapsed = false; sumSecClosed = {}; filt = newFilter(); panelOpen = false; persisted = docs.some(function (x) { return x.id === d.id; }); render(); }
 var shell, sideOpen = (function () { try { if (window.matchMedia && matchMedia('(max-width: 899px)').matches) return false; return localStorage.getItem('qrdSide') !== '0'; } catch (e) { return true; } })();
 function isNarrow() { return !!(window.matchMedia && matchMedia('(max-width: 899px)').matches); }
 function setSide(on) {
@@ -726,8 +726,22 @@ function drawSummary() {
       h('i', { class: 'p', style: 'width:' + (T.pass / n * 100) + '%' }), h('i', { class: 'f', style: 'width:' + (T.fail / n * 100) + '%' }), h('i', { class: 'b', style: 'width:' + (T.blocked / n * 100) + '%' })),
     h('div', { class: 'srows' }, cur.cases.map(function (c, i) {
       if (!matches(c)) return null;
-      var secRow = null, g0 = groupStart(i);
-      if (g0 !== lastG) { lastG = g0; var hc = g0 >= 0 ? cur.cases[g0] : null; if (hc && hc.section.trim()) secRow = h('button', { class: 'srow sec', type: 'button', title: 'Jump to this section', onclick: function () { jumpSec(hc.id); } }, h('span', { class: 'no2', text: '' }), h('span', { class: 'tx', text: hc.section.trim() }), h('span', { class: 'badge none', text: groupCases(g0).length + (groupCases(g0).length === 1 ? ' case' : ' cases') })); }
+      var secRow = null, g0 = groupStart(i), head = g0 >= 0 ? cur.cases[g0] : null, named = !!(head && head.section.trim());
+      var folded = named && !!sumSecClosed[head.id] && !isFiltering();            /* a filter always shows what it found */
+      if (g0 !== lastG) {
+        lastG = g0;
+        if (named) {
+          var grp = groupCases(g0), p = 0, f = 0, hid = head.id;
+          grp.forEach(function (x) { if (x.status === 'pass') p++; else if (x.status === 'fail') f++; });
+          var flip = function () { sumSecClosed[hid] = !sumSecClosed[hid]; refreshSummary(); };
+          secRow = h('div', { class: 'srow sec', onclick: flip },
+            h('button', { class: 'btn sm ghost chev', type: 'button', title: folded ? 'Show its test cases' : 'Hide its test cases', 'aria-expanded': String(!folded), 'aria-label': (folded ? 'Show' : 'Hide') + ' test cases of ' + head.section.trim(),
+              onclick: function (e) { e.stopPropagation(); flip(); } }, folded ? '\u25b8' : '\u25be'),
+            h('button', { class: 'tx secjump', type: 'button', title: 'Jump to this section', onclick: function (e) { e.stopPropagation(); jumpSec(hid); } }, head.section.trim()),
+            h('span', { class: 'badge none', text: grp.length + (grp.length === 1 ? ' case' : ' cases') + (p ? ' \u00b7 ' + p + ' passed' : '') + (f ? ' \u00b7 ' + f + ' failed' : '') }));
+        }
+      }
+      if (folded) return secRow;                                                   /* its test cases are folded away */
       var t = EX.firstLine(richBlocks(c.title), 120);
       var row = h('button', { class: 'srow', type: 'button', title: 'Jump to ' + label(i), onclick: function () { jumpTo(c.id); } },
         h('span', { class: 'no2', text: String(i + 1).padStart(2, '0') }),
