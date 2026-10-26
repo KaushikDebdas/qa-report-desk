@@ -22,7 +22,7 @@ body{margin:0;background:var(--desk);color:var(--ink);font-family:var(--f-body);
 button,input,select,textarea{font:inherit;color:inherit}
 button{cursor:pointer}
 :focus-visible{outline:2px solid var(--accent);outline-offset:2px}
-.wrap{max-width:920px;margin:0 auto;padding-inline:16px}
+.wrap{max-width:var(--content-max,1600px);margin:0 auto;padding-inline:clamp(12px,2.2vw,28px)}
 .btn{border:1px solid var(--line);background:var(--paper);border-radius:6px;padding:6px 12px;font-weight:500;line-height:1.3;display:inline-flex;align-items:center;gap:6px;white-space:nowrap}
 .btn:hover{border-color:var(--ink3)}
 .btn.primary{background:var(--accent);color:var(--accent-ink);border-color:var(--accent)}
@@ -254,3 +254,43 @@ select.in{padding:5px 7px}
 .fempty{padding:14px;border:1px dashed var(--line);border-radius:8px;color:var(--ink2);text-align:center}
 .case.fhide{display:none}
 .dfilter{display:grid;gap:6px;padding:0 12px 8px;flex:none}
+
+/* sections */
+.sechead{display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-top:28px;padding:8px 10px;border-radius:8px;background:var(--accent-soft);border-left:4px solid var(--accent);scroll-margin-top:110px;transition:background .6s}
+.sechead .chev{flex:none}
+.sechead .sname{flex:1 1 220px;min-width:160px;font-family:var(--f-display);font-size:22px;font-weight:700;letter-spacing:.02em;background:transparent;border-color:transparent;padding:2px 6px}
+.sechead .sname:hover{border-color:var(--line)}
+.sechead .sname:focus{background:var(--field);border-color:var(--accent)}
+.sechead.flash{background:var(--line2)}
+.sechead.fhide{display:none}
+.sstat{color:var(--ink2);font-size:12.5px;white-space:nowrap}
+.sechead + .case{margin-top:6px;border-top:0}
+.addrow{display:flex;gap:8px;flex-wrap:wrap;margin-top:10px}
+.addrow .addcase{margin-top:0}
+.srow.sec{background:var(--accent-soft);font-weight:700;margin-top:6px;grid-template-columns:42px minmax(0,1fr) auto}
+.srow.sec:hover{background:var(--line2)}
+
+/* use the width that is there: fluid page, and a wide card puts the fields and the screenshots side by side */
+.sheet{padding-inline:clamp(14px,2.6vw,40px)}
+.cbody{display:grid;gap:10px}
+.cfields{display:grid;gap:10px;min-width:0;align-content:start}
+.cshots{min-width:0}
+.cfields .params{max-width:none}
+/* once a card has a screenshot, "add another" is a slim drop area, not a second full-size frame */
+.frame.zone.compact{aspect-ratio:auto;min-height:92px;padding:12px}
+.frame.zone.compact .ph{gap:2px}
+
+/* one column: fields use the full width, but a screenshot never grows taller than the screen */
+.shots{max-width:1080px}
+
+/* view buttons (Collapse all / Expand all) at the right end of the toolbar that stays on screen */
+.vgroup{display:flex;align-items:center;gap:2px;flex:none;margin-left:10px}
+.tb.vb{font-weight:600;color:var(--ink2);white-space:nowrap}
+.tb.vb:hover{color:var(--ink)}
+@media (max-width:560px){.vgroup{margin-left:auto}}
+
+/* the hint gives way (and truncates) so the view buttons stay on the first row of the toolbar */
+.tools .hint{flex:1 1 0;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;text-align:right;margin-left:12px}
+
+.tb.vb .vi{display:none;font-size:18px;line-height:1}
+@media (max-width:560px){.tb.vb .vl{display:none}.tb.vb .vi{display:inline}.vgroup{margin-left:6px}}

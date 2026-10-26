@@ -171,7 +171,7 @@ function toolbar() {
     h('span', { class: 'sep' }), sw,
     btn('Highlight', 'Highlight', function () { cmd('hiliteColor', '#fff176', true); }, 'hilite', 'background:#fff17655'),
     btn('Clear', 'Clear formatting', function () { cmd('removeFormat'); }, 'removeFormat'),
-    h('span', { class: 'hint', text: 'Formatting applies to the text field you are typing in' })));
+    h('span', { class: 'hint', text: 'Formatting applies to the text field you are typing in' }), viewBtns()));
   syncTools();
   return bar;
 }
@@ -303,6 +303,7 @@ function fixDoc(d) {
   d.cases.forEach(function (c) {
     c.params = c.params || []; c.shots = c.shots || []; c.hasParams = !!c.hasParams;
     c.title = c.title || ''; c.data = c.data || ''; c.notes = c.notes || ''; c.status = ST[c.status] ? c.status : 'none';
+    c.section = typeof c.section === 'string' ? c.section : undefined;
   });
   return d;
 }
@@ -353,6 +354,7 @@ function setCollapsed(c, on, elArg) {
   var chev = el.querySelector('.chev'), prev = el.querySelector('.cprev');
   if (chev) { chev.textContent = on ? '▸' : '▾'; chev.title = on ? 'Expand' : 'Collapse'; chev.setAttribute('aria-expanded', String(!on)); chev.setAttribute('aria-label', (on ? 'Expand ' : 'Collapse ') + lab(c)); }
   if (prev && on) prev.textContent = previewText(c);
+  updateSectionHeads();
 }
 function collapseCtl(c) {
   var chev = h('button', { class: 'btn sm ghost chev', type: 'button', onclick: function (e) { e.stopPropagation(); setCollapsed(c, !collapsed[c.id]); } });
@@ -360,16 +362,29 @@ function collapseCtl(c) {
   return { chev: chev, prev: prev };
 }
 var sumCollapsed = false;
+function paintSumChev(b) { b.textContent = sumCollapsed ? '\u25b8' : '\u25be'; b.title = sumCollapsed ? 'Expand summary' : 'Collapse summary'; b.setAttribute('aria-expanded', String(!sumCollapsed)); }
+function setSummaryCollapsed(on) {
+  sumCollapsed = !!on;
+  if (!sumBox) return;
+  sumBox.classList.toggle('sumcollapsed', sumCollapsed);
+  var chev = sumBox.querySelector('.sumhead .chev'); if (chev) paintSumChev(chev);
+}
 function sumHead() {
   sumBox.classList.toggle('sumcollapsed', sumCollapsed);
-  function paint(b) { b.textContent = sumCollapsed ? '▸' : '▾'; b.title = sumCollapsed ? 'Expand summary' : 'Collapse summary'; b.setAttribute('aria-expanded', String(!sumCollapsed)); }
-  var chev = h('button', { class: 'btn sm ghost chev', type: 'button', 'aria-label': 'Toggle summary', onclick: function () { sumCollapsed = !sumCollapsed; sumBox.classList.toggle('sumcollapsed', sumCollapsed); paint(chev); } });
-  paint(chev);
-  return h('div', { class: 'sumhead' }, chev, h('h2', { text: 'Summary' }), h('span', { class: 'grow' }), collapseAllBtns());
+  var chev = h('button', { class: 'btn sm ghost chev', type: 'button', 'aria-label': 'Toggle summary', onclick: function () { setSummaryCollapsed(!sumCollapsed); } });
+  paintSumChev(chev);
+  return h('div', { class: 'sumhead' }, chev, h('h2', { text: 'Summary' }));
 }
-function collapseAllBtns() {
-  function all(on) { cur.cases.forEach(function (c) { setCollapsed(c, on); }); }
-  return [h('button', { class: 'btn sm ghost', type: 'button', title: 'Collapse every card', onclick: function () { all(true); } }, 'Collapse all'), h('button', { class: 'btn sm ghost', type: 'button', title: 'Expand every card', onclick: function () { all(false); } }, 'Expand all')];
+/* Collapse all / Expand all: the summary, every section heading and every card, from the bar that stays on screen */
+function collapseEverything(on) {
+  if (!cur) return;
+  setSummaryCollapsed(on);
+  cur.cases.forEach(function (c) { setCollapsed(c, on); });
+}
+function viewBtns() {
+  return h('div', { class: 'vgroup' }, h('span', { class: 'sep' }),
+    h('button', { class: 'tb vb', type: 'button', title: 'Collapse the summary and every card', 'aria-label': 'Collapse all', onclick: function () { collapseEverything(true); } }, h('span', { class: 'vl', text: 'Collapse all' }), h('span', { class: 'vi', text: '⊟' })),
+    h('button', { class: 'tb vb', type: 'button', title: 'Expand the summary and every card', 'aria-label': 'Expand all', onclick: function () { collapseEverything(false); } }, h('span', { class: 'vl', text: 'Expand all' }), h('span', { class: 'vi', text: '⊞' })));
 }
 function openDoc(d) { cur = fixDoc(clone(d)); activeCase = null; views = {}; collapsed = {}; sumCollapsed = false; filt = newFilter(); panelOpen = false; persisted = docs.some(function (x) { return x.id === d.id; }); render(); }
 var shell, sideOpen = (function () { try { if (window.matchMedia && matchMedia('(max-width: 899px)').matches) return false; return localStorage.getItem('qrdSide') !== '0'; } catch (e) { return true; } })();
@@ -414,9 +429,8 @@ function sideEl() {
     h('div', { class: 'dfilter' }, dq, dt),
     panelEl,
     h('div', { class: 'side-foot' },
-      h('button', { class: 'btn sm', type: 'button', title: 'Download every document and screenshot as one file', onclick: exportAllDocs }, 'Export all'),
-      h('button', { class: 'btn sm', type: 'button', title: 'Choose one or more documents and download them as one file', onclick: pickExport }, 'Export selected'),
-      h('button', { class: 'btn sm', type: 'button', title: 'Load a file made with Export. If it holds several documents you choose which to import.', onclick: function () { pick.click(); } }, 'Import'),
+      h('button', { class: 'btn sm', type: 'button', title: 'Download your documents as one JSON file. You choose which ones.', onclick: pickExport }, 'Export JSON'),
+      h('button', { class: 'btn sm', type: 'button', title: 'Load a JSON file made with Export JSON. If it holds several documents you choose which to import.', onclick: function () { pick.click(); } }, 'Import JSON'),
       pick));
 }
 function lab(c) { return cur.type === 'bug' ? 'Bug ' + String(cur.cases.indexOf(c) + 1).padStart(2, '0') : label(cur.cases.indexOf(c)); }
@@ -494,13 +508,14 @@ function bugEl(c) {
   el.append(
     h('div', { class: 'chead' }, cc.chev, h('span', { class: 'no' }, lab(c)), h('span', { class: 'grow' }), act),
     cc.prev,
+    h('div', { class: 'cbody' }, h('div', { class: 'cfields' },
     sum,
     h('div', { class: 'meta' }, tf('id', 'Bug ID', 'e.g. PROJ-101'), tf('module', 'Module / Feature', 'e.g. Login'), tf('env', 'Environment', 'e.g. UAT'), tf('build', 'Build / Version', 'e.g. 1.0.0'),
       sf('severity', 'Severity', SEVERITY), sf('priority', 'Priority', PRIORITY), sf('status', 'Status', BUGSTATUS),
       tf('reporter', 'Reported by', 'Name'), tf('date', 'Date', '', 'date'), tf('assignee', 'Assigned to', 'Name')),
     h('div', { class: 'bugfields' }, rf('pre', 'Preconditions', 'User, data and state needed before step 1'), rf('steps', 'Steps to reproduce', 'Use the numbered-list button: 1. Log in as…  2. Open…'),
       rf('expected', 'Expected result', 'What should happen'), rf('actual', 'Actual result', 'What happens instead, with any error message'), rf('notes', 'Notes / workaround', 'Optional')),
-    v.shots);
+    ), h('div', { class: 'cshots' }, v.shots)));
   renderShots(c);
   setCollapsed(c, collapsed[c.id], el);
   return el;
@@ -526,13 +541,56 @@ function renderMain() {
     filterBar(),
     h('div', { class: 'bartools' }, countEl, h('label', { class: 'lbl', for: 'doc-ratio', text: 'Screenshot frame' }), ratio),
     casesBox,
-    h('button', { class: 'btn addcase', onclick: function () { clearFilters(); var c = newCase(); cur.cases.push(c); activeCase = c.id; renderCases(); refreshSummary(); markDirty(); focusCase(c.id); } }, '+ Add test case')));
+    h('div', { class: 'addrow' },
+      h('button', { class: 'btn addcase', onclick: function () { clearFilters(); var c = newCase(); cur.cases.push(c); activeCase = c.id; renderCases(); refreshSummary(); markDirty(); focusCase(c.id); } }, '+ Add test case'),
+      h('button', { class: 'btn addcase', title: 'Start a new section (feature or menu name); its test cases go under it', onclick: addSection }, '+ Add section'))));
   applyRatio(); renderCases(); refreshSummary();
 }
 function focusCase(id) { var e = document.querySelector('#case-' + id + ' .bsum, #case-' + id + ' .rich'); if (e) { e.focus(); e.scrollIntoView({ block: 'center', behavior: 'smooth' }); } }
 function applyRatio() { main.style.setProperty('--ratio', cur.ratio === 'natural' ? '16/9' : cur.ratio); main.classList.toggle('natural', cur.ratio === 'natural'); }
-function renderCases() { casesBox.replaceChildren(); views = {}; cur.cases.forEach(function (c) { casesBox.append(cur.type === 'bug' ? bugEl(c) : caseEl(c)); }); }
+function renderCases() { casesBox.replaceChildren(); views = {}; cur.cases.forEach(function (c) { if (cur.type !== 'bug' && hasSec(c)) casesBox.append(sectionEl(c)); casesBox.append(cur.type === 'bug' ? bugEl(c) : caseEl(c)); }); updateSectionHeads(); }
 
+/* ---------- sections: optional heading (feature / menu name) above a group of test cases ---------- */
+function hasSec(c) { return typeof c.section === 'string'; }
+function groupStart(i) { for (var k = i; k >= 0; k--) if (hasSec(cur.cases[k])) return k; return -1; }
+function groupEnd(i) { var k = i + 1; while (k < cur.cases.length && !hasSec(cur.cases[k])) k++; return k; }          /* exclusive */
+function groupCases(startIdx) { return cur.cases.slice(startIdx, groupEnd(startIdx)); }
+function secName(i) { var g = groupStart(i); return g >= 0 ? cur.cases[g].section.trim() : ''; }
+function sectionEl(c) {
+  var chev = h('button', { class: 'btn sm ghost chev', type: 'button', onclick: function () { toggleSection(c); } });
+  var inp = h('input', { class: 'in sname', value: c.section, placeholder: 'Section name, e.g. the feature or menu you are testing', 'aria-label': 'Section name',
+    oninput: function (e) { c.section = e.target.value; refreshSummary(); markDirty(); } });
+  var stat = h('span', { class: 'sstat' });
+  return h('div', { class: 'sechead', id: 'sec-' + c.id },
+    chev, inp, stat,
+    h('button', { class: 'btn sm', type: 'button', title: 'Add a test case at the end of this section', onclick: function () { insertAfter(groupCases(cur.cases.indexOf(c)).slice(-1)[0]); } }, '+ Test case'),
+    twoStep(h('button', { class: 'btn sm ghost', title: 'Remove this heading; the test cases stay' }, 'Remove heading'), 'Remove?', function () { c.section = undefined; renderCases(); refreshSummary(); markDirty(); }));
+}
+function toggleSection(c) {
+  var list = groupCases(cur.cases.indexOf(c)), anyOpen = list.some(function (x) { return !collapsed[x.id]; });
+  list.forEach(function (x) { setCollapsed(x, anyOpen); });
+}
+function updateSectionHeads() {
+  if (!cur || cur.type === 'bug') return;
+  cur.cases.forEach(function (c, i) {
+    if (!hasSec(c)) return;
+    var el = document.getElementById('sec-' + c.id); if (!el) return;
+    var list = groupCases(i), n = list.length, p = 0, f = 0;
+    list.forEach(function (x) { if (x.status === 'pass') p++; else if (x.status === 'fail') f++; });
+    el.querySelector('.sstat').textContent = n + ' test case' + (n === 1 ? '' : 's') + (p ? ' \u00b7 ' + p + ' passed' : '') + (f ? ' \u00b7 ' + f + ' failed' : '');
+    var allClosed = list.every(function (x) { return collapsed[x.id]; }), chev = el.querySelector('.chev');
+    chev.textContent = allClosed ? '\u25b8' : '\u25be'; chev.title = allClosed ? 'Expand this section' : 'Collapse this section'; chev.setAttribute('aria-expanded', String(!allClosed));
+  });
+}
+function focusSection(id) { var e = document.querySelector('#sec-' + id + ' .sname'); if (e) { e.focus(); e.scrollIntoView({ block: 'center', behavior: 'smooth' }); } }
+function isBlankCase(c) { return !hasSec(c) && !c.shots.length && !rtext(c.title) && !rtext(c.data) && !rtext(c.notes) && !(c.hasParams && c.params.some(function (x) { return x.k || x.v; })); }
+function addSection() {
+  clearFilters();
+  var last = cur.cases[cur.cases.length - 1], k = last && isBlankCase(last) ? last : null;     /* an empty card at the end becomes the first card of the section */
+  if (!k) { k = newCase(); cur.cases.push(k); }
+  k.section = ''; activeCase = k.id;
+  renderCases(); refreshSummary(); markDirty(); focusSection(k.id);
+}
 /* ---------- filters (view only, never saved or exported) ---------- */
 function newFilter() { return { q: '', st: {}, sev: '', pri: '', bstat: '', shots: '' }; }
 var filt = newFilter(), fui = null, docQ = '', docType = '', docLbl = null;
@@ -544,6 +602,7 @@ function caseText(c, type) {
   var t = [];
   if (type === 'bug') { var b = c.bug; t.push(c.sum, b.id, b.module, b.env, b.build, b.severity, b.priority, b.status, b.reporter, b.assignee, rtext(b.pre), rtext(b.steps), rtext(b.expected), rtext(b.actual), rtext(b.notes)); }
   else { t.push(rtext(c.title), rtext(c.data), rtext(c.notes)); (c.params || []).forEach(function (p) { t.push(p.k, p.v); }); }
+  if (typeof c.section === 'string') t.push(c.section);
   (c.shots || []).forEach(function (sh) { t.push(sh.caption); });
   return t.join(' \n ').toLowerCase();
 }
@@ -551,7 +610,7 @@ function tokens(q) { return String(q || '').toLowerCase().split(/\s+/).filter(Bo
 function hasAll(text, toks) { for (var i = 0; i < toks.length; i++) if (text.indexOf(toks[i]) < 0) return false; return true; }
 function matches(c) {
   var bug = cur.type === 'bug', toks = tokens(filt.q);
-  if (toks.length && !hasAll(caseText(c, cur.type) + ' #' + (cur.cases.indexOf(c) + 1), toks)) return false;
+  if (toks.length && !hasAll(caseText(c, cur.type) + ' #' + (cur.cases.indexOf(c) + 1) + ' ' + (bug ? '' : secName(cur.cases.indexOf(c)).toLowerCase()), toks)) return false;
   if (bug) {
     if (filt.sev && c.bug.severity !== filt.sev) return false;
     if (filt.pri && c.bug.priority !== filt.pri) return false;
@@ -597,9 +656,12 @@ function filterChanged() { applyFilter(); refreshSummary(); }
 function clearFilters() { if (!isFiltering()) return; filt = newFilter(); syncFilterUi(); filterChanged(); }
 function applyFilter() {
   if (!fui || !cur) return;
-  var n = cur.cases.length, shown = 0, on = isFiltering(), counts = { pass: 0, fail: 0, blocked: 0, none: 0 };
+  var n = cur.cases.length, shown = 0, on = isFiltering(), counts = { pass: 0, fail: 0, blocked: 0, none: 0 }, gShown = {}, g = -1;
+  updateSectionHeads();
   cur.cases.forEach(function (c, i) {
     var ok = matches(c); if (ok) shown++;
+    if (hasSec(c)) g = i;
+    gShown[g] = gShown[g] || ok;
     if (cur.type !== 'bug') counts[ST[c.status] ? c.status : 'none']++;
     var el = document.getElementById('case-' + c.id);
     if (el) {
@@ -609,6 +671,7 @@ function applyFilter() {
       if (dn) dn.disabled = on || i === n - 1;
     }
   });
+  cur.cases.forEach(function (c, i) { if (hasSec(c)) { var se = document.getElementById('sec-' + c.id); if (se) se.classList.toggle('fhide', !gShown[i]); } });
   Object.keys(fui.chips).forEach(function (k) {
     var ch = fui.chips[k], active = !!filt.st[k];
     ch.el.textContent = ch.label + ' ' + counts[k]; ch.el.classList.toggle('on', active); ch.el.setAttribute('aria-pressed', String(active));
@@ -646,6 +709,7 @@ function refreshSummary() {
 function drawSummary() {
   if (cur && cur.type === 'bug') { drawBugSummary(); return; }
   if (!sumBox || !cur) return;
+  var lastG = -2;
   var T = summaryModel(), n = T.total || 1;
   var overall = T.result === 'PASS' ? 'pass' : T.result === 'FAIL' ? 'fail' : 'blocked';
   var s = cur.cases.reduce(function (a, c) { return a + c.shots.length; }, 0);
@@ -662,12 +726,20 @@ function drawSummary() {
       h('i', { class: 'p', style: 'width:' + (T.pass / n * 100) + '%' }), h('i', { class: 'f', style: 'width:' + (T.fail / n * 100) + '%' }), h('i', { class: 'b', style: 'width:' + (T.blocked / n * 100) + '%' })),
     h('div', { class: 'srows' }, cur.cases.map(function (c, i) {
       if (!matches(c)) return null;
+      var secRow = null, g0 = groupStart(i);
+      if (g0 !== lastG) { lastG = g0; var hc = g0 >= 0 ? cur.cases[g0] : null; if (hc && hc.section.trim()) secRow = h('button', { class: 'srow sec', type: 'button', title: 'Jump to this section', onclick: function () { jumpSec(hc.id); } }, h('span', { class: 'no2', text: '' }), h('span', { class: 'tx', text: hc.section.trim() }), h('span', { class: 'badge none', text: groupCases(g0).length + (groupCases(g0).length === 1 ? ' case' : ' cases') })); }
       var t = EX.firstLine(richBlocks(c.title), 120);
-      return h('button', { class: 'srow', type: 'button', title: 'Jump to ' + label(i), onclick: function () { jumpTo(c.id); } },
+      var row = h('button', { class: 'srow', type: 'button', title: 'Jump to ' + label(i), onclick: function () { jumpTo(c.id); } },
         h('span', { class: 'no2', text: String(i + 1).padStart(2, '0') }),
         h('span', { class: 'tx', text: t || '(no description yet)' }),
         h('span', { class: 'badge ' + c.status, text: ST[c.status].label }));
+      return [secRow, row];
     })));
+}
+function jumpSec(id) {
+  var e = document.getElementById('sec-' + id); if (!e) return;
+  e.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  e.classList.add('flash'); setTimeout(function () { e.classList.remove('flash'); }, 1300);
 }
 function jumpTo(id) {
   var e = document.getElementById('case-' + id); if (!e) return;
@@ -699,6 +771,7 @@ function caseEl(c) {
     h('button', { class: 'btn sm ghost', title: 'Back to summary', onclick: function () { document.getElementById('summary').scrollIntoView({ behavior: 'smooth', block: 'start' }); } }, '↑ Summary'),
     h('button', { class: 'btn sm ghost', title: 'Move up', 'aria-label': 'Move test case up', disabled: idx === 0, onclick: function () { moveCase(c, -1); } }, '↑'),
     h('button', { class: 'btn sm ghost', title: 'Move down', 'aria-label': 'Move test case down', disabled: idx === n - 1, onclick: function () { moveCase(c, 1); } }, '↓'),
+    hasSec(c) ? null : h('button', { class: 'btn sm ghost', title: 'Start a new section (feature or menu name) above this test case', onclick: function () { c.section = ''; renderCases(); refreshSummary(); markDirty(); focusSection(c.id); } }, '+ Section'),
     h('button', { class: 'btn sm ghost', title: 'Add a new test case right below this one', onclick: function () { insertAfter(c); } }, '+ Add below'),
     h('button', { class: 'btn sm ghost', title: 'Copy this test case without screenshots', onclick: function () { copyCase(c); } }, 'Copy'),
     twoStep(h('button', { class: 'btn sm ghost', disabled: n === 1 }, 'Delete'), 'Delete it?', function () { removeCase(c); }));
@@ -710,15 +783,30 @@ function caseEl(c) {
   var notes = richField(function () { return c.notes; }, function (x) { c.notes = x; }, { ph: 'Actual result, bug id, observations…', aria: 'Remarks' });
   function fld(l, ctrl) { return h('div', { class: 'field' }, h('span', { class: 'lbl', text: l }), ctrl); }
   v.params = h('div'); v.shots = h('div', { class: 'shots' });
-  el.append(head, cc.prev, fld('Description', desc), fld('Test data', data), v.params, fld('Remarks / actual result', notes), v.shots);
+  el.append(head, cc.prev, h('div', { class: 'cbody' },
+    h('div', { class: 'cfields' }, fld('Description', desc), fld('Test data', data), v.params, fld('Remarks / actual result', notes)),
+    h('div', { class: 'cshots' }, v.shots)));
   renderParams(c); renderShots(c);
   setCollapsed(c, collapsed[c.id], el);
   return el;
 }
 function moveCase(c, d) {
   var i = cur.cases.indexOf(c), j = i + d; if (j < 0 || j >= cur.cases.length) return;
-  cur.cases.splice(i, 1); cur.cases.splice(j, 0, c); renderCases(); refreshSummary(); markDirty();
-  var e = document.getElementById('case-' + c.id); if (e) e.scrollIntoView({ block: 'nearest' });
+  var other = cur.cases[j], alone = hasSec(c) && groupEnd(i) === i + 1;           /* c is the only test case under its heading */
+  function crossed() { renderCases(); refreshSummary(); markDirty(); var e = document.getElementById('case-' + c.id); if (e) e.scrollIntoView({ block: 'nearest' }); }
+  if (cur.type !== 'bug') {
+    /* A heading is crossed first, as its own step: only the card you move changes section, never its neighbours. */
+    if (d === -1 && hasSec(c)) {                                                  /* top card of a section moves up: leaves it, joins the section above */
+      if (alone) { toast('This is the only test case under its heading. Add another one first, or remove the heading.'); return; }
+      cur.cases[i + 1].section = c.section; c.section = undefined; crossed(); return;
+    }
+    if (d === 1 && hasSec(other)) {                                               /* last card of a section moves down: joins the next section */
+      if (alone) { toast('This is the only test case under its heading. Add another one first, or remove the heading.'); return; }
+      c.section = other.section; other.section = undefined; crossed(); return;
+    }
+    var keep = c.section; c.section = other.section; other.section = keep;        /* inside one section: the heading stays on top */
+  }
+  cur.cases.splice(i, 1); cur.cases.splice(j, 0, c); crossed();
 }
 function insertAfter(c) {
   clearFilters();
@@ -732,6 +820,7 @@ function copyCase(c) {
 }
 function removeCase(c) {
   c.shots.forEach(function (s) { Shots.drop(s.shotId); });
+  if (hasSec(c)) { var nx = cur.cases[cur.cases.indexOf(c) + 1]; if (nx && !hasSec(nx)) nx.section = c.section; }            /* the heading passes to the next card */
   cur.cases.splice(cur.cases.indexOf(c), 1); if (activeCase === c.id) activeCase = null;
   renderCases(); refreshSummary(); markDirty();
 }
@@ -793,7 +882,7 @@ function zoneEl(c) {
   var icon = document.createElement('span'); icon.innerHTML = IMG_ICON;
   var ph = h('div', { class: 'ph' }, icon.firstChild, h('b', { text: c.shots.length ? 'Add another screenshot' : 'Paste a screenshot' }), h('small', { text: cur.type === 'bug' ? 'Ctrl+V to paste, or drop files' : 'Ctrl+V while this test case is highlighted, or drop files' }),
     h('button', { class: 'btn sm', type: 'button', onclick: function (e) { e.stopPropagation(); file.click(); } }, 'Browse'));
-  var z = h('div', { class: 'frame zone', tabindex: '0', role: 'group', 'aria-label': 'Add screenshot to ' + lab(c) }, ph, file);
+  var z = h('div', { class: 'frame zone' + (c.shots.length ? ' compact' : ''), tabindex: '0', role: 'group', 'aria-label': 'Add screenshot to ' + lab(c) }, ph, file);
   z.addEventListener('dragover', function (e) { e.preventDefault(); z.classList.add('over'); });
   z.addEventListener('dragleave', function () { z.classList.remove('over'); });
   z.addEventListener('drop', function (e) { e.preventDefault(); e.stopPropagation(); z.classList.remove('over'); addFiles(c, Array.prototype.filter.call(e.dataTransfer.files || [], function (f) { return f.type.indexOf('image/') === 0; })); });
@@ -890,7 +979,6 @@ async function exportDocs(list, fileBase) {
     toast('Exported ' + out.length + ' document' + (out.length === 1 ? '' : 's') + ': ' + name);
   } catch (e) { toast('Export failed: ' + (e && e.message || 'unknown error')); }
 }
-function exportAllDocs() { return exportDocs(listDocs(), 'qa-report-desk-all-' + new Date().toISOString().slice(0, 10)); }
 function exportOneDoc(d) { return exportDocs([d], safeName(docTitleOf(d)) || 'document'); }
 
 function shotIdsOf(d) { var ids = []; (d.cases || []).forEach(function (c) { (c.shots || []).forEach(function (s) { if (s.shotId) ids.push(s.shotId); }); }); return ids; }
@@ -974,10 +1062,14 @@ async function pickExport() {
   await flush();
   var list = listDocs();
   if (!list.length) { toast('Nothing to export yet.'); return; }
+  if (list.length === 1) { exportOneDoc(list[0]); return; }
   pickDocs({
-    docs: list, title: 'Choose what to export', sub: 'Tick the documents to put in one file. You can open that file in any browser with Import.', verb: 'Export',
-    off: function () { return false; }, initial: function () { return false; }, tag: function () { return null; },
-    onGo: function (sel) { exportDocs(sel, sel.length === 1 ? (safeName(docTitleOf(sel[0])) || 'document') : 'qa-report-desk-' + sel.length + '-documents-' + new Date().toISOString().slice(0, 10)); }
+    docs: list, title: 'Choose what to export', sub: 'Everything is ticked. Untick what you do not need. You get one file that any browser can open with Import.', verb: 'Export',
+    off: function () { return false; }, initial: function () { return true; }, tag: function () { return null; },
+    onGo: function (sel) {
+      var day = new Date().toISOString().slice(0, 10);
+      exportDocs(sel, sel.length === 1 ? (safeName(docTitleOf(sel[0])) || 'document') : sel.length === list.length ? 'qa-report-desk-all-' + day : 'qa-report-desk-' + sel.length + '-documents-' + day);
+    }
   });
 }
 async function commitImport(list, inShots, bad) {
@@ -1064,7 +1156,7 @@ async function buildModel(btn) {
       var fr = await frameShot(c.shots[j], cur.ratio);
       if (fr) shots.push({ caption: c.shots[j].caption, b64: fr.b64, w: fr.w, h: fr.h });
     }
-    model.cases.push({ title: richBlocks(c.title), data: richBlocks(c.data), notes: richBlocks(c.notes), status: c.status, params: c.hasParams ? c.params.map(function (p) { return [p.k, p.v]; }) : [], shots: shots });
+    model.cases.push({ section: hasSec(c) ? c.section : undefined, title: richBlocks(c.title), data: richBlocks(c.data), notes: richBlocks(c.notes), status: c.status, params: c.hasParams ? c.params.map(function (p) { return [p.k, p.v]; }) : [], shots: shots });
   }
   return model;
 }
@@ -1081,7 +1173,7 @@ async function exportAs(kind, btn) {
   } catch (e) { toast(e && e.message === 'lib' ? 'Could not load the exporter. Run npm install on the server.' : 'Export failed: ' + (e && e.message || 'unknown error')); console.error(e); }
   btn.textContent = orig; btn.disabled = false; exportBusy = false;
 }
-window.__qa = { importFiles: importFiles, exportAllDocs: exportAllDocs, pickExport: pickExport, exportOneDoc: exportOneDoc, IDB: IDB, isLocal: function () { return useLocal; }, need: need, buildModel: buildModel, parseRich: parseRich, sanitize: sanitize };
+window.__qa = { importFiles: importFiles, pickExport: pickExport, exportOneDoc: exportOneDoc, IDB: IDB, isLocal: function () { return useLocal; }, need: need, buildModel: buildModel, parseRich: parseRich, sanitize: sanitize };
 
 /* ------------------------------------------------------------ boot */
 (async function () {

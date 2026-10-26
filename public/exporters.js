@@ -40,6 +40,8 @@
     return t.length > (max || 110) ? t.slice(0, (max || 110) - 1) + '…' : t;
   }
   function hasText(blocks) { return plain(blocks).length > 0; }
+  /* optional section heading (feature / menu name) that starts a group of test cases */
+  function secOf(c) { return (c && typeof c.section === 'string' && c.section.trim()) ? c.section.trim() : ''; }
   function tally(cases) {
     var t = { total: cases.length, pass: 0, fail: 0, blocked: 0, none: 0 };
     cases.forEach(function (c) { t[ST[c.status] ? c.status : 'none']++; });
@@ -206,6 +208,10 @@
     ] })];
     model.cases.forEach(function (c, i) {
       var s = st(c.status), t = firstLine(c.title);
+      if (secOf(c)) sumRows.push(new D.TableRow({ cantSplit: true, children: [new D.TableCell({
+        columnSpan: 3, width: { size: CONTENT, type: D.WidthType.DXA }, borders: borders, margins: { top: 60, bottom: 60, left: 100, right: 100 },
+        shading: { type: D.ShadingType.CLEAR, fill: 'DCE6F1', color: 'auto' },
+        children: [new P({ children: [new D.InternalHyperlink({ anchor: 'sec' + (i + 1), children: [new R({ text: secOf(c), bold: true, color: LINK, underline: {} })] })] })] })] }));
       sumRows.push(new D.TableRow({ cantSplit: true, children: [
         cell([txt(String(i + 1))], cw[0]),
         cell([new P({ children: [link('tc' + (i + 1), label(i) + (t ? ': ' + t : ''))] })], cw[1]),
@@ -220,7 +226,10 @@
       var headRuns = [new R({ text: label(i) + ': ', bold: true })];
       var rest = tb;
       if (tb.length && tb[0].t === 'p') { headRuns = headRuns.concat(runs(tb[0].items[0])); rest = tb.slice(1); }
-      kids.push(new P({ spacing: { before: 360, after: 80 }, keepNext: true, children: bookmark('tc' + (i + 1), headRuns) }));
+      if (secOf(c)) kids.push(new P({ spacing: { before: 520, after: 60 }, keepNext: true,
+        border: { bottom: { style: D.BorderStyle.SINGLE, size: 8, color: '9AA5B1', space: 4 } },
+        children: bookmark('sec' + (i + 1), [new R({ text: secOf(c), bold: true, size: 30, color: '0B4F6C' })]) }));
+      kids.push(new P({ spacing: { before: secOf(c) ? 160 : 360, after: 80 }, keepNext: true, children: bookmark('tc' + (i + 1), headRuns) }));
       blockParas(rest, { keepNext: true }).forEach(function (p) { kids.push(p); });
       kids.push(new P({ spacing: { after: 100 }, keepNext: true, children: [
         new R({ text: 'Status: ' }),
@@ -348,7 +357,7 @@
     var ws = wb.addWorksheet('Evidence', { views: [{ showGridLines: false }] });
     ws.columns = [{ width: 20 }, { width: 92 }, { width: 18 }];
     ws.pageSetup = { orientation: 'portrait', fitToPage: true, fitToWidth: 1, fitToHeight: 0 };
-    var IMG_W = 620, ROW_PX = 20, r = 1, T = tally(model.cases), rowOf = [];
+    var IMG_W = 620, ROW_PX = 20, r = 1, T = tally(model.cases), rowOf = [], secRow = [];
     var head = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFE7ECF1' } };
     var thin = { style: 'thin', color: { argb: 'FF9AA5B1' } };
     var box = { top: thin, left: thin, bottom: thin, right: thin };
@@ -391,6 +400,7 @@
     r++;
     model.cases.forEach(function (c, i) {
       var s = st(c.status);
+      if (secOf(c)) { secRow[i] = r; put(ws, r, 1, secOf(c), { bold: true, size: 14, color: '0B4F6C', fill: 'DCE6F1', box: true }); ws.mergeCells(r, 1, r, 3); r++; }
       rowOf[i] = r;
       put(ws, r, 1, label(i), { bold: true, fill: true, box: true });
       put(ws, r, 2, rich(c.title), { fill: true, box: true });
@@ -438,6 +448,11 @@
     q++;
     model.cases.forEach(function (c, i) {
       var s = st(c.status), t = firstLine(c.title, 160);
+      if (secOf(c)) {
+        for (var cc = 1; cc <= 4; cc++) put(sm, q, cc, '', { fill: 'DCE6F1', box: true });
+        setLink(sm.getCell(q, 1), "#'Evidence'!A" + secRow[i], secOf(c)); sm.getCell(q, 1).font = F({ bold: true, color: { argb: 'FF0563C1' }, underline: true });
+        sm.mergeCells(q, 1, q, 4); q++;
+      }
       put(sm, q, 1, i + 1, { box: true }); sm.getCell(q, 1).alignment = { horizontal: 'left', vertical: 'top' };
       var lc = put(sm, q, 2, '', { box: true });
       setLink(lc, "#'Evidence'!A" + rowOf[i], label(i) + (t ? ': ' + t : ''));
@@ -513,7 +528,7 @@
     if (model.type === 'bug') return buildBugHtml(model);
     var o = [], T = tally(model.cases), res = RESULT[T.result];
     o.push('<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>' + esc(model.title || 'Test Evidence Document') + '</title>');
-    o.push('<style>html{scroll-behavior:smooth}body{font:15px/1.5 Calibri,"Segoe UI",Arial,sans-serif;color:#14212c;max-width:17.4cm;margin:28px auto;padding:0 16px}h1{font-size:22px;margin:0 0 6px}h2{font-size:17px;margin:22px 0 6px}.tk{font-size:16px;font-weight:700;margin:0 0 6px}.meta{color:#555;margin:0 0 14px}.badge{display:inline-block;border-radius:4px;padding:1px 9px;font-weight:700;font-size:13px}.counts{color:#555;margin:6px 0 10px}table{border-collapse:collapse;width:100%;margin:6px 0 10px}th,td{border:1px solid #9aa5b1;padding:4px 8px;text-align:left;vertical-align:top}th{background:#e7ecf1}td.n{width:42px}td.s{width:96px;white-space:nowrap}a{color:#0563c1}.case{margin:30px 0 0;padding-top:4px;scroll-margin-top:12px}.case h3{font-size:16px;margin:0 0 4px}.case h3 span.t{font-weight:400}.stat{margin:4px 0 8px}.back{margin-left:12px;font-size:13px}p{margin:0 0 6px}ul,ol{margin:0 0 8px;padding-left:26px}.data{margin:0 0 8px}.cap{margin:10px 0 4px}figure{margin:0 0 14px}img{display:block;width:100%;height:auto;border:1px solid #d2dae2}@media print{body{margin:0}.back{display:none}}</style></head><body>');
+    o.push('<style>html{scroll-behavior:smooth}body{font:15px/1.5 Calibri,"Segoe UI",Arial,sans-serif;color:#14212c;max-width:17.4cm;margin:28px auto;padding:0 16px}h1{font-size:22px;margin:0 0 6px}h2{font-size:17px;margin:22px 0 6px}.tk{font-size:16px;font-weight:700;margin:0 0 6px}.meta{color:#555;margin:0 0 14px}.badge{display:inline-block;border-radius:4px;padding:1px 9px;font-weight:700;font-size:13px}.counts{color:#555;margin:6px 0 10px}table{border-collapse:collapse;width:100%;margin:6px 0 10px}th,td{border:1px solid #9aa5b1;padding:4px 8px;text-align:left;vertical-align:top}th{background:#e7ecf1}td.n{width:42px}td.s{width:96px;white-space:nowrap}a{color:#0563c1}.case{margin:30px 0 0;padding-top:4px;scroll-margin-top:12px}.case h3{font-size:16px;margin:0 0 4px}.case h3 span.t{font-weight:400}.stat{margin:4px 0 8px}.back{margin-left:12px;font-size:13px}p{margin:0 0 6px}ul,ol{margin:0 0 8px;padding-left:26px}.data{margin:0 0 8px}.cap{margin:10px 0 4px}figure{margin:0 0 14px}img{display:block;width:100%;height:auto;border:1px solid #d2dae2}tr.sec td{background:#dfe9f0;font-weight:700}.secname{font-size:19px;color:#0b4f6c;border-bottom:2px solid #9aa5b1;padding-bottom:4px;margin:34px 0 0}.secname .back{font-weight:400}@media print{body{margin:0}.back{display:none}}</style></head><body>');
     o.push('<h1>' + esc(model.title || 'Test Evidence Document') + '</h1>');
     if (model.ticket) o.push('<p class="tk">' + esc(model.ticket) + '</p>');
     var ml = metaLine(model.meta); if (ml) o.push('<p class="meta">' + esc(ml) + '</p>');
@@ -521,12 +536,14 @@
     o.push('<table><thead><tr><th>#</th><th>Test case</th><th>Status</th></tr></thead><tbody>');
     model.cases.forEach(function (c, i) {
       var t = firstLine(c.title);
+      if (secOf(c)) o.push('<tr class="sec"><td colspan="3"><a href="#sec' + (i + 1) + '">' + esc(secOf(c)) + '</a></td></tr>');
       o.push('<tr><td class="n">' + (i + 1) + '</td><td><a href="#tc' + (i + 1) + '">' + esc(label(i) + (t ? ': ' + t : '')) + '</a></td><td class="s" style="background:#' + st(c.status).fill + '">' + badge(st(c.status)) + '</td></tr>');
     });
     o.push('</tbody></table>');
     model.cases.forEach(function (c, i) {
       var tb = c.title || [], first = '', rest = tb;
       if (tb.length && tb[0].t === 'p') { first = rsHtml(tb[0].items[0]); rest = tb.slice(1); }
+      if (secOf(c)) o.push('<h2 class="secname" id="sec' + (i + 1) + '">' + esc(secOf(c)) + '<a class="back" href="#summary">\u2191 Back to summary</a></h2>');
       o.push('<section class="case" id="tc' + (i + 1) + '"><h3>' + esc(label(i)) + ': <span class="t">' + first + '</span></h3>' + blocksHtml(rest));
       o.push('<p class="stat">Status: ' + badge(st(c.status)) + '<a class="back" href="#summary">↑ Back to summary</a></p>');
       if (hasText(c.data)) o.push('<div class="data"><strong>Test data:</strong> ' + blocksHtml(c.data) + '</div>');
