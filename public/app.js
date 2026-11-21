@@ -389,8 +389,13 @@ function viewBtns() {
 function openDoc(d) { cur = fixDoc(clone(d)); activeCase = null; views = {}; collapsed = {}; sumCollapsed = false; sumSecClosed = {}; pinId = null; filt = newFilter(); panelOpen = false; persisted = docs.some(function (x) { return x.id === d.id; }); render(); }
 var shell, sideOpen = (function () { try { if (window.matchMedia && matchMedia('(max-width: 899px)').matches) return false; return localStorage.getItem('qrdSide') !== '0'; } catch (e) { return true; } })();
 function isNarrow() { return !!(window.matchMedia && matchMedia('(max-width: 899px)').matches); }
+function syncStickyH() {
+  var t = document.querySelector('.top'), l = document.querySelector('.tools');
+  document.documentElement.style.setProperty('--stickyh', ((t ? t.offsetHeight : 0) + (l ? l.offsetHeight : 0)) + 'px');
+}
+window.addEventListener('resize', syncStickyH);
 function setSide(on) {
-  sideOpen = !!on; if (shell) shell.classList.toggle('side-open', sideOpen);
+  sideOpen = !!on; if (shell) shell.classList.toggle('side-open', sideOpen); setTimeout(syncStickyH, 0);
   if (!isNarrow()) { try { localStorage.setItem('qrdSide', sideOpen ? '1' : '0'); } catch (e) { /* ignore */ } }
 }
 function render() {
@@ -404,7 +409,7 @@ function render() {
   main = h('main', { class: 'wrap' });
   var content = h('div', { class: 'content' }, top, toolbar(), main);
   shell = h('div', { class: 'shell' + (sideOpen ? ' side-open' : '') }, sideEl(), h('div', { class: 'scrim', onclick: function () { setSide(false); } }), content);
-  app.append(shell);
+  app.append(shell); syncStickyH();
   renderMain(); renderPanel();
 }
 function sideEl() {
@@ -567,6 +572,15 @@ function revealField(el) {                           /* cursor into the new fiel
   if (r.top >= top && r.top <= vh - 170) return;
   var below = r.top > vh - 170, near = r.top - (vh - 220) < vh * 1.2;
   jumpBy(r.top - (below && near ? vh - 220 : Math.round(vh * 0.3)));         /* just below the screen: scroll as little as possible; far away or above: show it near the top */
+}
+function revealShot(cap, fig) {                     /* caption of a pasted screenshot: cursor in it, and the page moves only if it is out of sight */
+  if (!cap) return;
+  cap.focus({ preventScroll: true });
+  var bars = document.querySelector('.tools'), topMin = (bars ? bars.getBoundingClientRect().bottom : 90) + 24, vh = window.innerHeight;
+  var c = cap.getBoundingClientRect(), f = fig ? fig.getBoundingClientRect() : c;
+  if (c.top >= topMin && c.top <= vh - 200) return;                          /* already comfortable: do not touch the page */
+  var total = f.bottom - c.top;                                              /* caption + screenshot */
+  jumpBy(c.top - Math.max(topMin + 36, vh - 24 - total));                    /* whole screenshot in view if it fits, otherwise caption near the top */
 }
 function refreshNow() { cancelAnimationFrame(sumRaf); sumRaf = 0; drawSummary(); applyFilter(); }      /* redraw before measuring, so nothing shifts afterwards */
 function focusCase(id) { revealField(document.querySelector('#case-' + id + ' .bsum, #case-' + id + ' .rich')); }
@@ -899,7 +913,7 @@ function renderShots(c, focusIdx) {
   var box = views[c.id].shots; box.replaceChildren();
   c.shots.forEach(function (s, i) { box.append(shotEl(c, s, i)); });
   box.append(zoneEl(c));
-  if (focusIdx != null) { var cap = box.querySelectorAll('.cap')[focusIdx]; if (cap) cap.focus(); }
+  if (focusIdx != null) revealShot(box.querySelectorAll('.cap')[focusIdx], box.querySelectorAll('figure.shot')[focusIdx]);
 }
 function shotEl(c, s, i) {
   var file = h('input', { type: 'file', accept: 'image/*', class: 'hide-file', 'aria-label': 'Choose a replacement image' });
@@ -946,15 +960,27 @@ async function replaceShot(c, s, file) {
   try { var p = await processImage(file), id = await Shots.add(p), old = s.shotId; s.shotId = id; s.w = p.w; s.h = p.h; s.kb = p.kb; s.at = Date.now(); Shots.drop(old); renderShots(c); markDirty(); }
   catch (e) { toast('Could not store that image.'); }
 }
+function pasteTarget() {
+  var vh = window.innerHeight, bars = document.querySelector('.tools'), top = bars ? bars.getBoundingClientRect().bottom : 90;
+  function seen(el) { var r = el.getBoundingClientRect(); return Math.max(0, Math.min(r.bottom, vh) - Math.max(r.top, top)); }
+  function byEl(el) { return el ? cur.cases.filter(function (x) { return 'case-' + x.id === el.id; })[0] : null; }
+  var ae = document.activeElement, typing = byEl(ae && ae.closest ? ae.closest('article.case') : null);
+  if (typing) return typing;                                                  /* the cursor is inside a card: that one */
+  var act = document.getElementById('case-' + activeCase);
+  if (act && seen(act) > 60) return byEl(act);                                /* the card you last used is still on screen */
+  var best = null, bestSeen = 0;                                              /* otherwise the card most on screen */
+  Array.prototype.forEach.call(document.querySelectorAll('article.case'), function (el) { var v = seen(el); if (v > bestSeen) { bestSeen = v; best = el; } });
+  return byEl(best) || cur.cases[0];
+}
 document.addEventListener('paste', function (e) {
   if (!cur) return;
   var items = Array.prototype.slice.call((e.clipboardData && e.clipboardData.items) || []);
   var imgs = items.filter(function (i) { return i.type.indexOf('image/') === 0; });
   if (!imgs.length || items.some(function (i) { return i.type === 'text/plain'; })) return;
   e.preventDefault();
-  var c = cur.cases.filter(function (x) { return x.id === activeCase; })[0] || cur.cases[0];
+  var c = pasteTarget();
   if (collapsed[c.id]) setCollapsed(c, false);
-  if (c.id !== activeCase) { activeCase = c.id; var el = document.getElementById('case-' + c.id); if (el) el.classList.add('active'); }
+  if (c.id !== activeCase) { var old = document.getElementById('case-' + activeCase); if (old) old.classList.remove('active'); activeCase = c.id; var el = document.getElementById('case-' + c.id); if (el) el.classList.add('active'); }
   addFiles(c, imgs.map(function (i) { return i.getAsFile(); }).filter(Boolean));
 });
 window.addEventListener('dragover', function (e) { e.preventDefault(); });
