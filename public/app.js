@@ -386,7 +386,7 @@ function viewBtns() {
     h('button', { class: 'tb vb', type: 'button', title: 'Collapse the summary and every card', 'aria-label': 'Collapse all', onclick: function () { collapseEverything(true); } }, h('span', { class: 'vl', text: 'Collapse all' }), h('span', { class: 'vi', text: '⊟' })),
     h('button', { class: 'tb vb', type: 'button', title: 'Expand the summary and every card', 'aria-label': 'Expand all', onclick: function () { collapseEverything(false); } }, h('span', { class: 'vl', text: 'Expand all' }), h('span', { class: 'vi', text: '⊞' })));
 }
-function openDoc(d) { cur = fixDoc(clone(d)); activeCase = null; views = {}; collapsed = {}; sumCollapsed = false; sumSecClosed = {}; filt = newFilter(); panelOpen = false; persisted = docs.some(function (x) { return x.id === d.id; }); render(); }
+function openDoc(d) { cur = fixDoc(clone(d)); activeCase = null; views = {}; collapsed = {}; sumCollapsed = false; sumSecClosed = {}; pinId = null; filt = newFilter(); panelOpen = false; persisted = docs.some(function (x) { return x.id === d.id; }); render(); }
 var shell, sideOpen = (function () { try { if (window.matchMedia && matchMedia('(max-width: 899px)').matches) return false; return localStorage.getItem('qrdSide') !== '0'; } catch (e) { return true; } })();
 function isNarrow() { return !!(window.matchMedia && matchMedia('(max-width: 899px)').matches); }
 function setSide(on) {
@@ -448,7 +448,7 @@ function renderBug() {
     filterBar(),
     h('div', { class: 'bartools' }, countEl, h('label', { class: 'lbl', for: 'doc-ratio', text: 'Screenshot frame' }), ratio),
     casesBox,
-    h('button', { class: 'btn addcase', onclick: function () { clearFilters(); var c = newBugCase(); cur.cases.push(c); activeCase = c.id; renderCases(); refreshSummary(); markDirty(); focusCase(c.id); } }, '+ Add bug')));
+    h('button', { class: 'btn addcase', onclick: function () { var c = newBugCase(); cur.cases.push(c); activeCase = c.id; pinId = c.id; renderCases(); refreshNow(); markDirty(); focusCase(c.id); } }, '+ Add bug')));
   applyRatio(); renderCases(); refreshSummary();
 }
 function sevBadge(k) { var v = EX.SEV[k]; return h('span', { class: 'badge none', style: v ? 'background:#' + v.fill + ';color:#' + v.ink : '', text: k || '–' }); }
@@ -542,11 +542,34 @@ function renderMain() {
     h('div', { class: 'bartools' }, countEl, h('label', { class: 'lbl', for: 'doc-ratio', text: 'Screenshot frame' }), ratio),
     casesBox,
     h('div', { class: 'addrow' },
-      h('button', { class: 'btn addcase', onclick: function () { clearFilters(); var c = newCase(); cur.cases.push(c); activeCase = c.id; renderCases(); refreshSummary(); markDirty(); focusCase(c.id); } }, '+ Add test case'),
+      h('button', { class: 'btn addcase', onclick: function () { var c = newCase(); cur.cases.push(c); activeCase = c.id; pinId = c.id; renderCases(); refreshNow(); markDirty(); focusCase(c.id); } }, '+ Add test case'),
       h('button', { class: 'btn addcase', title: 'Start a new section (feature or menu name); its test cases go under it', onclick: addSection }, '+ Add section'))));
   applyRatio(); renderCases(); refreshSummary();
 }
-function focusCase(id) { var e = document.querySelector('#case-' + id + ' .bsum, #case-' + id + ' .rich'); if (e) { e.focus(); e.scrollIntoView({ block: 'center', behavior: 'smooth' }); } }
+/* ---------- keep the view steady when something is added ---------- */
+var pinId = null;                                    /* a card you just added stays visible even if the current filter would hide it */
+function jumpBy(dy) {                                /* one instant move, never the page's smooth scrolling (it flew across hundreds of cards) */
+  if (!dy) return;
+  var de = document.documentElement, prev = de.style.scrollBehavior;
+  de.style.scrollBehavior = 'auto'; window.scrollBy(0, dy); de.style.scrollBehavior = prev;
+}
+function topOf(id) { var e = document.getElementById(id); return e ? e.getBoundingClientRect().top : null; }
+function withAnchor(id, fn) {                        /* whatever you were looking at stays exactly where it is on screen */
+  var t0 = id ? topOf(id) : null;
+  fn();
+  var t1 = id ? topOf(id) : null;
+  if (t0 != null && t1 != null) jumpBy(t1 - t0);
+}
+function revealField(el) {                           /* cursor into the new field; move the page only if it is not comfortably on screen */
+  if (!el) return;
+  el.focus({ preventScroll: true });
+  var bars = document.querySelector('.tools'), top = (bars ? bars.getBoundingClientRect().bottom : 90) + 24, vh = window.innerHeight, r = el.getBoundingClientRect();
+  if (r.top >= top && r.top <= vh - 170) return;
+  var below = r.top > vh - 170, near = r.top - (vh - 220) < vh * 1.2;
+  jumpBy(r.top - (below && near ? vh - 220 : Math.round(vh * 0.3)));         /* just below the screen: scroll as little as possible; far away or above: show it near the top */
+}
+function refreshNow() { cancelAnimationFrame(sumRaf); sumRaf = 0; drawSummary(); applyFilter(); }      /* redraw before measuring, so nothing shifts afterwards */
+function focusCase(id) { revealField(document.querySelector('#case-' + id + ' .bsum, #case-' + id + ' .rich')); }
 function applyRatio() { main.style.setProperty('--ratio', cur.ratio === 'natural' ? '16/9' : cur.ratio); main.classList.toggle('natural', cur.ratio === 'natural'); }
 function renderCases() { casesBox.replaceChildren(); views = {}; cur.cases.forEach(function (c) { if (cur.type !== 'bug' && hasSec(c)) casesBox.append(sectionEl(c)); casesBox.append(cur.type === 'bug' ? bugEl(c) : caseEl(c)); }); updateSectionHeads(); }
 
@@ -563,7 +586,7 @@ function sectionEl(c) {
   var stat = h('span', { class: 'sstat' });
   return h('div', { class: 'sechead', id: 'sec-' + c.id },
     chev, inp, stat,
-    h('button', { class: 'btn sm', type: 'button', title: 'Add a test case at the end of this section', onclick: function () { insertAfter(groupCases(cur.cases.indexOf(c)).slice(-1)[0]); } }, '+ Test case'),
+    h('button', { class: 'btn sm', type: 'button', title: 'Add a test case at the end of this section', onclick: function () { insertAfter(groupCases(cur.cases.indexOf(c)).slice(-1)[0], 'sec-' + c.id); } }, '+ Test case'),
     twoStep(h('button', { class: 'btn sm ghost', title: 'Remove this heading; the test cases stay' }, 'Remove heading'), 'Remove?', function () { c.section = undefined; renderCases(); refreshSummary(); markDirty(); }));
 }
 function toggleSection(c) {
@@ -582,14 +605,13 @@ function updateSectionHeads() {
     chev.textContent = allClosed ? '\u25b8' : '\u25be'; chev.title = allClosed ? 'Expand this section' : 'Collapse this section'; chev.setAttribute('aria-expanded', String(!allClosed));
   });
 }
-function focusSection(id) { var e = document.querySelector('#sec-' + id + ' .sname'); if (e) { e.focus(); e.scrollIntoView({ block: 'center', behavior: 'smooth' }); } }
+function focusSection(id) { revealField(document.querySelector('#sec-' + id + ' .sname')); }
 function isBlankCase(c) { return !hasSec(c) && !c.shots.length && !rtext(c.title) && !rtext(c.data) && !rtext(c.notes) && !(c.hasParams && c.params.some(function (x) { return x.k || x.v; })); }
 function addSection() {
-  clearFilters();
   var last = cur.cases[cur.cases.length - 1], k = last && isBlankCase(last) ? last : null;     /* an empty card at the end becomes the first card of the section */
   if (!k) { k = newCase(); cur.cases.push(k); }
-  k.section = ''; activeCase = k.id;
-  renderCases(); refreshSummary(); markDirty(); focusSection(k.id);
+  k.section = ''; activeCase = k.id; pinId = k.id;
+  renderCases(); refreshNow(); markDirty(); focusSection(k.id);
 }
 /* ---------- filters (view only, never saved or exported) ---------- */
 function newFilter() { return { q: '', st: {}, sev: '', pri: '', bstat: '', shots: '' }; }
@@ -609,6 +631,7 @@ function caseText(c, type) {
 function tokens(q) { return String(q || '').toLowerCase().split(/\s+/).filter(Boolean); }
 function hasAll(text, toks) { for (var i = 0; i < toks.length; i++) if (text.indexOf(toks[i]) < 0) return false; return true; }
 function matches(c) {
+  if (c.id === pinId) return true;
   var bug = cur.type === 'bug', toks = tokens(filt.q);
   if (toks.length && !hasAll(caseText(c, cur.type) + ' #' + (cur.cases.indexOf(c) + 1) + ' ' + (bug ? '' : secName(cur.cases.indexOf(c)).toLowerCase()), toks)) return false;
   if (bug) {
@@ -652,8 +675,8 @@ function syncFilterUi() {
   fui.q.value = filt.q;
   Object.keys(fui.selects).forEach(function (k) { fui.selects[k].value = filt[k]; });
 }
-function filterChanged() { applyFilter(); refreshSummary(); }
-function clearFilters() { if (!isFiltering()) return; filt = newFilter(); syncFilterUi(); filterChanged(); }
+function filterChanged() { pinId = null; applyFilter(); refreshSummary(); }
+function clearFilters() { pinId = null; if (!isFiltering()) return; filt = newFilter(); syncFilterUi(); filterChanged(); }
 function applyFilter() {
   if (!fui || !cur) return;
   var n = cur.cases.length, shown = 0, on = isFiltering(), counts = { pass: 0, fail: 0, blocked: 0, none: 0 }, gShown = {}, g = -1;
@@ -785,7 +808,7 @@ function caseEl(c) {
     h('button', { class: 'btn sm ghost', title: 'Back to summary', onclick: function () { document.getElementById('summary').scrollIntoView({ behavior: 'smooth', block: 'start' }); } }, '↑ Summary'),
     h('button', { class: 'btn sm ghost', title: 'Move up', 'aria-label': 'Move test case up', disabled: idx === 0, onclick: function () { moveCase(c, -1); } }, '↑'),
     h('button', { class: 'btn sm ghost', title: 'Move down', 'aria-label': 'Move test case down', disabled: idx === n - 1, onclick: function () { moveCase(c, 1); } }, '↓'),
-    hasSec(c) ? null : h('button', { class: 'btn sm ghost', title: 'Start a new section (feature or menu name) above this test case', onclick: function () { c.section = ''; renderCases(); refreshSummary(); markDirty(); focusSection(c.id); } }, '+ Section'),
+    hasSec(c) ? null : h('button', { class: 'btn sm ghost', title: 'Start a new section (feature or menu name) above this test case', onclick: function () { c.section = ''; renderCases(); refreshNow(); markDirty(); focusSection(c.id); } }, '+ Section'),
     h('button', { class: 'btn sm ghost', title: 'Add a new test case right below this one', onclick: function () { insertAfter(c); } }, '+ Add below'),
     h('button', { class: 'btn sm ghost', title: 'Copy this test case without screenshots', onclick: function () { copyCase(c); } }, 'Copy'),
     twoStep(h('button', { class: 'btn sm ghost', disabled: n === 1 }, 'Delete'), 'Delete it?', function () { removeCase(c); }));
@@ -822,15 +845,19 @@ function moveCase(c, d) {
   }
   cur.cases.splice(i, 1); cur.cases.splice(j, 0, c); crossed();
 }
-function insertAfter(c) {
-  clearFilters();
+function insertAfter(c, anchorId) {
   var k = cur.type === 'bug' ? newBugCase() : newCase();
-  cur.cases.splice(cur.cases.indexOf(c) + 1, 0, k); activeCase = k.id;
-  renderCases(); refreshSummary(); markDirty(); focusCase(k.id);
+  pinId = k.id;
+  withAnchor(anchorId || 'case-' + c.id, function () {
+    cur.cases.splice(cur.cases.indexOf(c) + 1, 0, k); activeCase = k.id; renderCases(); refreshNow();
+  });
+  markDirty(); focusCase(k.id);
 }
 function copyCase(c) {
   var k = cur.type === 'bug' ? newBugCase({ sum: c.sum, bug: Object.assign(clone(c.bug), { id: '', status: 'Open' }) }) : newCase({ title: c.title, data: c.data, notes: '', hasParams: c.hasParams, params: clone(c.params) });
-  cur.cases.splice(cur.cases.indexOf(c) + 1, 0, k); activeCase = k.id; renderCases(); refreshSummary(); markDirty(); focusCase(k.id);
+  pinId = k.id;
+  withAnchor('case-' + c.id, function () { cur.cases.splice(cur.cases.indexOf(c) + 1, 0, k); activeCase = k.id; renderCases(); refreshNow(); });
+  markDirty(); focusCase(k.id);
 }
 function removeCase(c) {
   c.shots.forEach(function (s) { Shots.drop(s.shotId); });
